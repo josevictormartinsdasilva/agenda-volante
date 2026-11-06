@@ -1,0 +1,34 @@
+# Sobe tudo com: docker compose up --build
+# Os valores após ":-" são padrões só para desenvolvimento local.
+# Para mudar, copie .env.example para .env (o .env nunca vai para o git).
+services:
+  api:
+    build: .
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-agenda}:${POSTGRES_PASSWORD:-agenda_dev}@db:5432/${POSTGRES_DB:-agenda}
+      CANCELAMENTO_ANTECEDENCIA_HORAS: ${CANCELAMENTO_ANTECEDENCIA_HORAS:-48}
+      DURACAO_AULA_MINUTOS: ${DURACAO_AULA_MINUTOS:-50}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agenda}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agenda_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-agenda}
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agenda} -d ${POSTGRES_DB:-agenda}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  dbdata:
