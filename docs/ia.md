@@ -9,3 +9,5 @@ Registro dos prompts e decisões que importaram. A IA sugeriu; as decisões são
 | 06/11 | Estrutura inicial (Compose, TS, ESLint, CI) | Separação `buildApp`/`server` para testar sem abrir porta | |
 | 06/11 | Preparação para o Claude Code (CLAUDE.md, plano, comandos) | Contexto do projeto versionado no repo, permissões que bloqueiam `.env` e `git push` | |
 | 06/11 | Sugestões de nome para a aplicação | "Agenda Volante": volante = direção e = móvel, como o instrutor autônomo | |
+| 07/11 | Domínio das regras R1–R6 com testes escritos antes do código | Funções puras `reservarAula`/`cancelarAula`; Strategy na política de cancelamento (R6) | |
+| 07/11 | Recusar reserva de horário passado | Erro `HorarioNoPassado`; `agora` injetado no pedido para manter o domínio puro | A IA apontou a lacuna; a decisão de implementar foi minha |
