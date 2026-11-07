@@ -17,6 +17,14 @@ describe('carregarConfig', () => {
     expect(config.cancelamentoAntecedenciaHoras).toBe(24);
   });
 
+  it('só usa banco quando DATABASE_URL está definida e não vazia', () => {
+    expect(carregarConfig({}).databaseUrl).toBeUndefined();
+    expect(carregarConfig({ DATABASE_URL: '' }).databaseUrl).toBeUndefined();
+    expect(carregarConfig({ DATABASE_URL: 'postgresql://u:s@db:5432/x' }).databaseUrl).toBe(
+      'postgresql://u:s@db:5432/x',
+    );
+  });
+
   it('falha cedo com valor inválido, em vez de subir com configuração errada', () => {
     expect(() => carregarConfig({ PORT: 'abc' })).toThrow(/PORT inválida/);
   });

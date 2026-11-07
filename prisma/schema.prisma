@@ -1,0 +1,46 @@
+// Datas em timestamptz: o Postgres guarda o instante em UTC e a grade de horários
+// é interpretada em America/Fortaleza só na camada de domínio.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StatusAula {
+  reservada
+  cancelada
+}
+
+model Aluno {
+  id     String  @id
+  nome   String
+  pacote Pacote?
+  aulas  Aula[]
+}
+
+model Pacote {
+  alunoId String @id
+  saldo   Int
+  aluno   Aluno  @relation(fields: [alunoId], references: [id])
+}
+
+/// Horário (início da aula) publicado pelo instrutor.
+model Disponibilidade {
+  inicio DateTime @id @db.Timestamptz(3)
+}
+
+// R3 (um aluno por horário) é garantida também pelo banco: o índice único parcial
+// `Aula_inicio_reservada_key` está na migration, pois o Prisma não o expressa aqui.
+model Aula {
+  id      String     @id
+  alunoId String
+  inicio  DateTime   @db.Timestamptz(3)
+  fim     DateTime   @db.Timestamptz(3)
+  status  StatusAula
+  aluno   Aluno      @relation(fields: [alunoId], references: [id])
+
+  @@index([inicio])
+}
