@@ -27,6 +27,18 @@ curl http://localhost:3000/health
 Para mudar portas, senha do banco ou regras de negócio, copie `.env.example`
 para `.env` e ajuste. O `.env` nunca vai para o repositório.
 
+## Observabilidade
+
+- **Logs:** JSON estruturado (pino), um por requisição.
+- **Métrica:** `GET /metrics` expõe `http_request_duration_seconds` (método, rota, status)
+  no formato do Prometheus.
+- **SLO:** disponibilidade de 99% e p95 abaixo de 300 ms no fluxo de consulta e reserva.
+  Detalhes e como medir em [`docs/slo.md`](docs/slo.md).
+
+```bash
+curl http://localhost:3000/metrics
+```
+
 ## Como testar
 
 Pré-requisito: Node.js 22.
@@ -48,6 +60,10 @@ docs/         regras de negócio, ADR, OpenAPI, desempenho, uso de IA
 ```
 
 ## Próximos passos (fora do escopo desta entrega)
+
+- Autenticação: hoje os endpoints do instrutor e o `/metrics` ficam abertos; em produção,
+  proteger o instrutor e expor `/metrics` só em rede interna
+- Subir um Prometheus para medir o SLO de forma contínua
 
 - Lembretes de aula por WhatsApp
 - Registro de pacotes vendidos e pagamentos
