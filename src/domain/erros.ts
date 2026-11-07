@@ -56,3 +56,22 @@ export class AulaJaCancelada extends ErroDeDominio {
     super('Essa aula já foi cancelada');
   }
 }
+
+/** A data pedida não é um dia válido no formato AAAA-MM-DD. */
+export class DataInvalida extends ErroDeDominio {
+  constructor(data: string) {
+    super(`Data inválida: "${data}" (use AAAA-MM-DD)`);
+  }
+}
+
+export class AlunoNaoEncontrado extends ErroDeDominio {
+  constructor() {
+    super('Aluno não encontrado');
+  }
+}
+
+export class AulaNaoEncontrada extends ErroDeDominio {
+  constructor() {
+    super('Aula não encontrada');
+  }
+}

@@ -7,6 +7,11 @@ export interface Aula {
   readonly status: 'reservada' | 'cancelada';
 }
 
+export interface Aluno {
+  readonly id: string;
+  readonly nome: string;
+}
+
 /** Pacote de aulas vendido ao aluno. `saldo` é quantas aulas ele ainda pode reservar. */
 export interface Pacote {
   readonly alunoId: string;
