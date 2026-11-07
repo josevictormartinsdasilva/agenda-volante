@@ -6,8 +6,39 @@ on:
   pull_request:
 
 jobs:
+  # Job separado: um vazamento de segredo não fica escondido por falha de teste, nem o contrário.
+  segredos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # histórico completo: um segredo apagado depois ainda está nos commits antigos
+
+      - name: Procurar segredos no repositório (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   qualidade:
     runs-on: ubuntu-latest
+    # Banco descartável só para o contrato dos repositórios Prisma; valores fictícios.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: agenda
+          POSTGRES_PASSWORD: agenda_ci
+          POSTGRES_DB: agenda_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agenda -d agenda_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://agenda:agenda_ci@localhost:5432/agenda_test
+      TEST_DATABASE_URL: postgresql://agenda:agenda_ci@localhost:5432/agenda_test
     steps:
       - uses: actions/checkout@v4
 
@@ -18,6 +49,12 @@ jobs:
 
       - name: Instalar dependências
         run: npm ci
+
+      - name: Gerar client do Prisma
+        run: npx prisma generate
+
+      - name: Aplicar migrations no banco de teste
+        run: npx prisma migrate deploy
 
       - name: Lint
         run: npm run lint
