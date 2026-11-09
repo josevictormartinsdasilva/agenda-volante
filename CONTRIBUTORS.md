@@ -15,6 +15,8 @@ Trabalho individual, em ordem de entrega (plano em [`docs/plano.md`](docs/plano.
 | 08/11 | Casos de uso do fluxo principal (publicar disponibilidade, consultar horários livres, reservar, consultar a agenda do dia, cancelar) e rotas HTTP com mapeamento de erros de domínio para status |
 | 08/11 | Repositórios por interface com implementação em memória e em Postgres (Prisma, migration e índice único parcial para R3); teste de contrato compartilhado; teste de integração do fluxo principal |
 | 09/11 | Métrica `http_request_duration_seconds` em `/metrics` (prom-client), SLO declarado em [`docs/slo.md`](docs/slo.md) e varredura de segredos com gitleaks no CI |
+| 09/11 | Verificação local de `docker compose up --build` e do contrato dos repositórios contra o Postgres real; correção do gatilho do CI, que não rodava nos pushes para `develop`; confirmação do gitleaks no GitHub |
+| 10/11 | Contrato OpenAPI em [`docs/openapi.yaml`](docs/openapi.yaml) com Spectral no CI, teste de aderência da API ao contrato e [ADR 0001](docs/adr/0001-repository-como-database-pattern-com-prisma.md) (Repository com Prisma); avaliação das vulnerabilidades do `npm audit` |
 
 ## Uso de IA
 
