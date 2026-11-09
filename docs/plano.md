@@ -6,7 +6,7 @@ Atualize o status ao concluir cada item. Entrega: **13/11/2026**.
 |---|---|---|
 | 06/11 | Repositório, README com nível, Compose (API + Postgres), TS, ESLint, CI (install, lint, test) | feito |
 | 07/11 | `src/domain/` com as regras R1–R6 e testes unitários; Strategy ou outro pattern justificado | feito |
-| 08/11 | Prisma + Repository, endpoints do fluxo principal, 1 teste de integração | feito, com ressalva: Prisma, migration, Repository, endpoints e teste de integração prontos. O contrato contra o Postgres só roda no CI (não havia Docker na máquina de desenvolvimento) e precisa ser confirmado lá e com `docker compose up --build` |
+| 08/11 | Prisma + Repository, endpoints do fluxo principal, 1 teste de integração | feito. Contrato dos repositórios confirmado contra o Postgres real e `docker compose up --build` verificado em 09/11 |
 | 09/11 | Métrica com prom-client em `/metrics`, SLO declarado, gitleaks no CI | feito (o job do gitleaks só roda no GitHub; confirmar no primeiro push) |
 | 10/11 | `docs/openapi.yaml` + Spectral no CI, `docs/adr/0001-*.md` (MADR, com alternativa descartada) | pendente |
 | 11/11 | Smoke test k6 e `docs/desempenho.md` com p95 medido | pendente |
