@@ -64,6 +64,10 @@ docs/         regras de negócio, ADR, OpenAPI, desempenho, uso de IA
 - Autenticação: hoje os endpoints do instrutor e o `/metrics` ficam abertos; em produção,
   proteger o instrutor e expor `/metrics` só em rede interna
 - Subir um Prometheus para medir o SLO de forma contínua
+- Atualizar Prisma para a versão 7 e Vitest para a 5: o `npm audit` aponta vulnerabilidades
+  em dependências transitivas (`deepmerge-ts`, `tinypool`, `minimatch`) que só se corrigem
+  com essas versões maiores. Avaliadas como sem exposição na API (afetam o CLI do Prisma e
+  as ferramentas de teste e lint), e não foram atualizadas para não arriscar a entrega
 
 - Lembretes de aula por WhatsApp
 - Registro de pacotes vendidos e pagamentos

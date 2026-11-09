@@ -1,0 +1,450 @@
+openapi: 3.1.0
+info:
+  title: Agenda Volante
+  version: 0.1.0
+  description: |
+    API de agendamento de aulas de um instrutor de trânsito autônomo. O aluno consulta
+    os horários livres e reserva sem interromper o instrutor.
+
+    Regras de negócio (detalhes em `docs/regras-de-negocio.md`):
+    - **R1** aulas começam em hora cheia (grade no fuso `America/Fortaleza`);
+    - **R2** aula de 50 minutos (`DURACAO_AULA_MINUTOS`);
+    - **R3** um aluno por horário;
+    - **R4** só se reserva dentro da disponibilidade publicada;
+    - **R5** só reserva quem tem saldo no pacote;
+    - **R6** cancelar com 48 h ou mais de antecedência devolve o crédito (`CANCELAMENTO_ANTECEDENCIA_HORAS`).
+
+    Todas as datas e horas trafegam em UTC (ISO 8601). O parâmetro `data` é um dia
+    `AAAA-MM-DD` lido no fuso `America/Fortaleza`.
+  contact:
+    name: José Víctor Martins
+    url: https://github.com/josevictormartinsdasilva/agenda-volante
+  license:
+    name: UNLICENSED
+    identifier: UNLICENSED
+servers:
+  - url: http://localhost:3000
+    description: Docker Compose local
+tags:
+  - name: Aulas
+    description: Fluxo principal de reserva e cancelamento
+  - name: Agenda
+    description: Consulta de horários livres e da agenda do dia
+  - name: Instrutor
+    description: Publicação da disponibilidade
+  - name: Alunos
+    description: Cadastro de aluno e registro do pacote vendido
+
+paths:
+  /aulas:
+    post:
+      tags: [Aulas]
+      operationId: reservarAula
+      summary: Reserva uma aula
+      description: |
+        Valida R1 a R5 e consome 1 crédito do pacote do aluno. A aula dura o
+        valor de `DURACAO_AULA_MINUTOS` (padrão 50 min).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservaPedido'
+            example:
+              alunoId: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
+              inicio: '2026-11-20T13:00:00.000Z'
+      responses:
+        '201':
+          description: Aula reservada e crédito consumido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaResposta'
+              example:
+                aula:
+                  id: 5e0b9a40-6f1d-4c53-8d7a-2a9f1b3c4d55
+                  alunoId: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
+                  inicio: '2026-11-20T13:00:00.000Z'
+                  fim: '2026-11-20T13:50:00.000Z'
+                  status: reservada
+                pacote:
+                  alunoId: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
+                  saldo: 1
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+        '404':
+          $ref: '#/components/responses/NaoEncontrado'
+        '409':
+          description: O horário já está reservado (R3)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                erro: Esse horário já está reservado
+        '422':
+          description: |
+            Regra de negócio violada: fora da hora cheia (R1), horário não publicado (R4),
+            horário no passado ou saldo insuficiente (R5).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              examples:
+                saldoInsuficiente:
+                  summary: R5
+                  value:
+                    erro: Saldo de aulas insuficiente no pacote
+                foraDaGrade:
+                  summary: R1
+                  value:
+                    erro: A aula deve começar em hora cheia (7h, 8h, 13h...)
+                indisponivel:
+                  summary: R4
+                  value:
+                    erro: Esse horário não está na disponibilidade publicada pelo instrutor
+
+  /aulas/{id}/cancelar:
+    post:
+      tags: [Aulas]
+      operationId: cancelarAula
+      summary: Cancela uma aula
+      description: |
+        R6: com antecedência igual ou maior que `CANCELAMENTO_ANTECEDENCIA_HORAS` o crédito
+        volta ao pacote; depois disso a aula é consumida (`creditoDevolvido: false`).
+      parameters:
+        - $ref: '#/components/parameters/AulaId'
+      responses:
+        '200':
+          description: Aula cancelada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelamentoResposta'
+              example:
+                aula:
+                  id: 5e0b9a40-6f1d-4c53-8d7a-2a9f1b3c4d55
+                  alunoId: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
+                  inicio: '2026-11-20T13:00:00.000Z'
+                  fim: '2026-11-20T13:50:00.000Z'
+                  status: cancelada
+                pacote:
+                  alunoId: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
+                  saldo: 2
+                creditoDevolvido: true
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+        '404':
+          $ref: '#/components/responses/NaoEncontrado'
+        '409':
+          description: A aula já havia sido cancelada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                erro: Essa aula já foi cancelada
+
+  /horarios-livres:
+    get:
+      tags: [Agenda]
+      operationId: consultarHorariosLivres
+      summary: Lista os horários livres de um dia
+      description: Horários publicados, ainda no futuro e sem aula reservada.
+      parameters:
+        - $ref: '#/components/parameters/Data'
+      responses:
+        '200':
+          description: Horários livres, em ordem crescente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HorariosLivresResposta'
+              example:
+                data: '2026-11-20'
+                horarios:
+                  - '2026-11-20T13:00:00.000Z'
+                  - '2026-11-20T14:00:00.000Z'
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+
+  /agenda:
+    get:
+      tags: [Agenda]
+      operationId: consultarAgenda
+      summary: Consulta a agenda do dia (instrutor)
+      description: Aulas reservadas no dia, em ordem de horário. Aulas canceladas não aparecem.
+      parameters:
+        - $ref: '#/components/parameters/Data'
+      responses:
+        '200':
+          description: Aulas reservadas no dia
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgendaResposta'
+              example:
+                data: '2026-11-20'
+                aulas:
+                  - id: 5e0b9a40-6f1d-4c53-8d7a-2a9f1b3c4d55
+                    alunoId: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
+                    inicio: '2026-11-20T13:00:00.000Z'
+                    fim: '2026-11-20T13:50:00.000Z'
+                    status: reservada
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+
+  /disponibilidades:
+    post:
+      tags: [Instrutor]
+      operationId: publicarDisponibilidade
+      summary: Publica horários disponíveis
+      description: |
+        Idempotente: publicar um horário que já existe não o duplica. Todos os horários
+        precisam estar em hora cheia (R1), senão nenhum é publicado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisponibilidadePedido'
+            example:
+              inicios:
+                - '2026-11-20T13:00:00.000Z'
+                - '2026-11-20T14:00:00.000Z'
+      responses:
+        '204':
+          description: Horários publicados
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+        '422':
+          description: Algum horário não está em hora cheia (R1)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                erro: A aula deve começar em hora cheia (7h, 8h, 13h...)
+
+  /alunos:
+    post:
+      tags: [Alunos]
+      operationId: cadastrarAluno
+      summary: Cadastra um aluno
+      description: Cria o aluno com um identificador gerado pelo servidor. O nome não pode ser vazio.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlunoPedido'
+            example:
+              nome: Ana
+      responses:
+        '201':
+          description: Aluno cadastrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Aluno'
+              example:
+                id: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
+                nome: Ana
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+
+  /alunos/{id}/pacote:
+    post:
+      tags: [Alunos]
+      operationId: registrarPacote
+      summary: Registra o pacote de aulas vendido
+      description: Soma a quantidade ao saldo atual do aluno. A venda e o pagamento ficam fora do sistema.
+      parameters:
+        - $ref: '#/components/parameters/AlunoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PacotePedido'
+            example:
+              quantidade: 10
+      responses:
+        '200':
+          description: Pacote com o novo saldo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pacote'
+              example:
+                alunoId: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
+                saldo: 10
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+        '404':
+          $ref: '#/components/responses/NaoEncontrado'
+
+components:
+  parameters:
+    AulaId:
+      name: id
+      in: path
+      required: true
+      description: Identificador da aula
+      schema:
+        type: string
+        minLength: 1
+    AlunoId:
+      name: id
+      in: path
+      required: true
+      description: Identificador do aluno
+      schema:
+        type: string
+        minLength: 1
+    Data:
+      name: data
+      in: query
+      required: true
+      description: Dia no formato AAAA-MM-DD, lido no fuso America/Fortaleza
+      schema:
+        type: string
+        pattern: '^\d{4}-\d{2}-\d{2}$'
+      example: '2026-11-20'
+
+  responses:
+    RequisicaoInvalida:
+      description: Corpo, parâmetro ou data inválidos
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          example:
+            erro: 'Data inválida: "amanha" (use AAAA-MM-DD)'
+    NaoEncontrado:
+      description: Aluno ou aula não encontrados
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          example:
+            erro: Aula não encontrada
+
+  schemas:
+    Erro:
+      type: object
+      required: [erro]
+      properties:
+        erro:
+          type: string
+          description: Mensagem legível, em português
+    Aluno:
+      type: object
+      required: [id, nome]
+      properties:
+        id:
+          type: string
+        nome:
+          type: string
+    AlunoPedido:
+      type: object
+      required: [nome]
+      properties:
+        nome:
+          type: string
+          minLength: 1
+    Pacote:
+      type: object
+      required: [alunoId, saldo]
+      properties:
+        alunoId:
+          type: string
+        saldo:
+          type: integer
+          minimum: 0
+          description: Quantas aulas o aluno ainda pode reservar
+    PacotePedido:
+      type: object
+      required: [quantidade]
+      properties:
+        quantidade:
+          type: integer
+          minimum: 1
+    Aula:
+      type: object
+      required: [id, alunoId, inicio, fim, status]
+      properties:
+        id:
+          type: string
+        alunoId:
+          type: string
+        inicio:
+          type: string
+          format: date-time
+        fim:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [reservada, cancelada]
+    ReservaPedido:
+      type: object
+      required: [alunoId, inicio]
+      properties:
+        alunoId:
+          type: string
+          minLength: 1
+        inicio:
+          type: string
+          format: date-time
+          description: Instante de início da aula, em hora cheia no fuso America/Fortaleza
+    ReservaResposta:
+      type: object
+      required: [aula, pacote]
+      properties:
+        aula:
+          $ref: '#/components/schemas/Aula'
+        pacote:
+          $ref: '#/components/schemas/Pacote'
+    CancelamentoResposta:
+      type: object
+      required: [aula, pacote, creditoDevolvido]
+      properties:
+        aula:
+          $ref: '#/components/schemas/Aula'
+        pacote:
+          $ref: '#/components/schemas/Pacote'
+        creditoDevolvido:
+          type: boolean
+          description: Verdadeiro se o cancelamento respeitou a antecedência mínima (R6)
+    DisponibilidadePedido:
+      type: object
+      required: [inicios]
+      properties:
+        inicios:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: date-time
+    HorariosLivresResposta:
+      type: object
+      required: [data, horarios]
+      properties:
+        data:
+          type: string
+        horarios:
+          type: array
+          items:
+            type: string
+            format: date-time
+    AgendaResposta:
+      type: object
+      required: [data, aulas]
+      properties:
+        data:
+          type: string
+        aulas:
+          type: array
+          items:
+            $ref: '#/components/schemas/Aula'

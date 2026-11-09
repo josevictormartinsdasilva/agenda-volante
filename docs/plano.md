@@ -8,7 +8,7 @@ Atualize o status ao concluir cada item. Entrega: **13/11/2026**.
 | 07/11 | `src/domain/` com as regras R1–R6 e testes unitários; Strategy ou outro pattern justificado | feito |
 | 08/11 | Prisma + Repository, endpoints do fluxo principal, 1 teste de integração | feito. Contrato dos repositórios confirmado contra o Postgres real e `docker compose up --build` verificado em 09/11 |
 | 09/11 | Métrica com prom-client em `/metrics`, SLO declarado, gitleaks no CI | feito (o job do gitleaks só roda no GitHub; confirmar no primeiro push) |
-| 10/11 | `docs/openapi.yaml` + Spectral no CI, `docs/adr/0001-*.md` (MADR, com alternativa descartada) | pendente |
+| 10/11 | `docs/openapi.yaml` + Spectral no CI, `docs/adr/0001-*.md` (MADR, com alternativa descartada) | feito (confirmar o Spectral e a CI verde no próximo push) |
 | 11/11 | Smoke test k6 e `docs/desempenho.md` com p95 medido | pendente |
 | 12/11 | README do primeiro dia revisado, `docs/ia.md`, `CONTRIBUTORS.md`, teste em clone limpo | pendente |
 | 13/11 | Folga, envio no Moodle (repo, README, link da CI verde), vídeo opcional | pendente |
