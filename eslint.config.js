@@ -12,4 +12,9 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
+  {
+    // Scripts do k6 rodam no runtime do k6, não no Node: __ENV é global dele
+    files: ['k6/**/*.js'],
+    languageOptions: { globals: { ...globals.node, __ENV: 'readonly' } },
+  },
 );

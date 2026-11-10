@@ -17,7 +17,8 @@
     "lint:api": "spectral lint docs/openapi.yaml --fail-severity=warn",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "smoke": "docker run --rm -i -e BASE_URL=http://host.docker.internal:3000 grafana/k6 run - < k6/smoke.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
