@@ -50,11 +50,23 @@ npm test               # testes
 npm run test:coverage  # testes + coverage mínimo (falha abaixo de 80% de linhas)
 ```
 
+## Smoke test de desempenho
+
+Com a API no ar (`docker compose up --build`), em outro terminal:
+
+```bash
+npm run smoke   # k6 via Docker, sem instalar nada
+```
+
+Mede o p95 de consultar horários livres e reservar. Detalhes, thresholds e o resultado
+medido em [`docs/desempenho.md`](docs/desempenho.md).
+
 ## Estrutura
 
 ```
 src/          código da aplicação
 tests/        testes automatizados
+k6/           smoke test de desempenho
 docs/         regras de negócio, ADR, OpenAPI, desempenho, uso de IA
 .github/      pipeline de CI
 ```
