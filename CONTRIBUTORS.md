@@ -17,6 +17,8 @@ Trabalho individual, em ordem de entrega (plano em [`docs/plano.md`](docs/plano.
 | 09/11 | Métrica `http_request_duration_seconds` em `/metrics` (prom-client), SLO declarado em [`docs/slo.md`](docs/slo.md) e varredura de segredos com gitleaks no CI |
 | 09/11 | Verificação local de `docker compose up --build` e do contrato dos repositórios contra o Postgres real; correção do gatilho do CI, que não rodava nos pushes para `develop`; confirmação do gitleaks no GitHub |
 | 10/11 | Contrato OpenAPI em [`docs/openapi.yaml`](docs/openapi.yaml) com Spectral no CI, teste de aderência da API ao contrato e [ADR 0001](docs/adr/0001-repository-como-database-pattern-com-prisma.md) (Repository com Prisma); avaliação das vulnerabilidades do `npm audit` |
+| 11/11 | Smoke test k6 do fluxo principal (`k6/smoke.js`, `npm run smoke`) com thresholds do SLO e guia em [`docs/desempenho.md`](docs/desempenho.md) |
+| 12/11 | Revisão do README do primeiro dia, do `docs/ia.md` e deste arquivo; teste em clone limpo |
 
 ## Uso de IA
 
