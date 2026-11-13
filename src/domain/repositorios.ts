@@ -2,8 +2,9 @@ import type { Aluno, Aula, Pacote } from './tipos.js';
 
 /**
  * Portas de persistência (Repository). O domínio e os casos de uso dependem só destas
- * interfaces; hoje há implementação em memória e um banco real entra depois sem
- * mexer nelas. Intervalos são [de, ate), em UTC.
+ * interfaces; há duas implementações (em memória, em `src/infra/memoria/`, e com
+ * Prisma, em `src/infra/prisma/`), trocáveis sem mexer nelas. Intervalos são
+ * [de, ate), em UTC.
  */
 export interface AlunoRepository {
   salvar(aluno: Aluno): Promise<void>;
