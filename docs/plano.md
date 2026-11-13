@@ -10,7 +10,7 @@ Atualize o status ao concluir cada item. Entrega: **13/11/2026**.
 | 09/11 | Métrica com prom-client em `/metrics`, SLO declarado, gitleaks no CI | feito (o job do gitleaks só roda no GitHub; confirmar no primeiro push) |
 | 10/11 | `docs/openapi.yaml` + Spectral no CI, `docs/adr/0001-*.md` (MADR, com alternativa descartada) | feito (confirmar o Spectral e a CI verde no próximo push) |
 | 11/11 | Smoke test k6 e `docs/desempenho.md` com p95 medido | feito. Rodado em 13/11 contra o Compose em clone limpo: p95 de 83,15 ms (`GET /horarios-livres`) e 137,88 ms (`POST /aulas`), 0% de falhas, SLO cumprido |
-| 12/11 | README do primeiro dia revisado, `docs/ia.md`, `CONTRIBUTORS.md`, teste em clone limpo | parcial: README revisado (fluxo principal, decisões de design, ADR, `prisma generate`), `docs/ia.md` e `CONTRIBUTORS.md` atualizados; clone limpo (`npm ci`, lint, typecheck, test:coverage, build) verde. `docker compose up --build` em clone limpo verificado em 13/11 (`/health` e `/metrics` respondendo). **Falta** conferir o `.env.example` |
+| 12/11 | README do primeiro dia revisado, `docs/ia.md`, `CONTRIBUTORS.md`, teste em clone limpo | feito: README revisado (fluxo principal, decisões de design, ADR, `prisma generate`), `docs/ia.md` e `CONTRIBUTORS.md` atualizados; clone limpo (`npm ci`, lint, typecheck, test:coverage, build) verde. `docker compose up --build` em clone limpo verificado em 13/11 (`/health` e `/metrics` respondendo). `.env.example` conferido pelo autor em 13/11 |
 | 13/11 | Folga, envio no Moodle (repo, README, link da CI verde), vídeo opcional | pendente. Checklist abaixo, na ordem |
 
 ## Checklist de 13/11 (antes do envio)
@@ -18,10 +18,10 @@ Atualize o status ao concluir cada item. Entrega: **13/11/2026**.
 Nenhum item depende de código novo; todos exigem o ambiente do autor (Docker, k6, GitHub).
 
 - [x] **Clone limpo + Compose (feito em 13/11):** clonar em pasta nova e rodar `docker compose up --build` (sem `.env`: o Compose tem padrões para tudo). Conferir `GET /health` e `GET /metrics`.
-- [ ] **`.env.example`:** conferir que tem `PORT`, `HOST`, `LOG_LEVEL`, `DATABASE_URL`, `CANCELAMENTO_ANTECEDENCIA_HORAS`, `DURACAO_AULA_MINUTOS`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` e `TEST_DATABASE_URL`, todas com valores fictícios, e que nenhum segredo real foi commitado.
+- [x] **`.env.example` (conferido pelo autor em 13/11):** conferir que tem `PORT`, `HOST`, `LOG_LEVEL`, `DATABASE_URL`, `CANCELAMENTO_ANTECEDENCIA_HORAS`, `DURACAO_AULA_MINUTOS`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` e `TEST_DATABASE_URL`, todas com valores fictícios, e que nenhum segredo real foi commitado.
 - [x] **Smoke k6 (feito em 13/11, SLO cumprido):** com a API no ar, `npm run smoke`; copiar o p95 e as falhas **da saída real** para `docs/desempenho.md` (nada de número estimado) e dizer se o SLO (p95 < 300 ms, falhas < 1%) foi cumprido.
-- [ ] **ADR e OpenAPI:** revisar `docs/adr/0001-*.md` e os exemplos de `docs/openapi.yaml` (pendência registrada em `docs/ia.md`, 10/11).
-- [ ] **Push e CI:** push da `develop`; confirmar CI verde, incluindo Spectral e gitleaks (só rodam no GitHub). Se algo falhar, corrigir antes de enviar.
+- [x] **ADR e OpenAPI (feito em 13/11: exemplos conferidos com chamadas reais à API, ADR conferido contra o código; o bug do 500 no cancelamento achado e corrigido):** revisar `docs/adr/0001-*.md` e os exemplos de `docs/openapi.yaml` (pendência registrada em `docs/ia.md`, 10/11).
+- [ ] **Push e CI (push feito em 13/11; falta confirmar a CI verde no GitHub):** push da `develop`; confirmar CI verde, incluindo Spectral e gitleaks (só rodam no GitHub). Se algo falhar, corrigir antes de enviar.
 - [ ] **README:** opcional, dizer que o Compose sobe sem `.env`; conferir que os comandos do "Como rodar" funcionam como escritos.
 - [ ] **Envio no Moodle (até 13/11):** link do repositório, README e link da execução verde da CI. Commits depois do prazo não são avaliados.
 - [ ] **Vídeo:** opcional, só se sobrar tempo.
