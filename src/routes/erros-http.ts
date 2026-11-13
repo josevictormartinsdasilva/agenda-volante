@@ -34,6 +34,13 @@ export function tratarErro(erro: FastifyError, requisicao: FastifyRequest, respo
   // Validação do schema (corpo, parâmetros, query) do próprio Fastify.
   if (erro.validation) return resposta.status(400).send({ erro: erro.message });
 
+  // Erros do cliente que o próprio Fastify detecta (corpo vazio ou JSON malformado com
+  // content-type json, tipo de mídia não suportado). Sem isto viravam 500 por engano.
+  const status = erro.statusCode;
+  if (status !== undefined && status >= 400 && status < 500) {
+    return resposta.status(status).send({ erro: erro.message });
+  }
+
   requisicao.log.error(erro);
   return resposta.status(500).send({ erro: 'Erro interno' });
 }
