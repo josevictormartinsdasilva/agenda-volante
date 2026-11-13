@@ -30,18 +30,23 @@ Thresholds (o k6 sai com erro se algum falhar):
 
 ## Resultado medido
 
-**Ainda não medido.** Esta seção só recebe números copiados da saída real do k6; nenhum
-valor é estimado. Depois de rodar `npm run smoke`, preencha:
+Números copiados da saída real do `npm run smoke` (API e Postgres via
+`docker compose up --build` em clone limpo; nenhum valor é estimado):
 
 | Item | Valor |
 |---|---|
-| Data da medição | _a preencher_ |
-| Máquina (CPU, RAM, SO) | _a preencher_ |
-| Docker / versão do k6 | _a preencher_ |
-| p95 de `GET /horarios-livres` | _a preencher_ |
-| p95 de `POST /aulas` | _a preencher_ |
-| Taxa de falhas (`http_req_failed`) | _a preencher_ |
-| Thresholds passaram? | _a preencher_ |
+| Data da medição | 13/11/2026 |
+| Máquina (CPU, RAM, SO) | Windows 11 Home; CPU Intel64 Family 6 Model 142 Stepping 10 GenuineIntel ~1792 Mhz e RAM 16 GB |
+| Docker / versão do k6 | Docker 29.9.2; versão do k6 k6 v2.4.0 (commit/dd9395906d, go1.27.3, linux/amd64) (imagem `grafana/k6`) |
+| p95 de `GET /horarios-livres` | 83,15 ms |
+| p95 de `POST /aulas` | 137,88 ms |
+| p95 geral (todas as requisições) | 133,27 ms |
+| Taxa de falhas (`http_req_failed`) | 0,00% (0 de 403 requisições) |
+| Checks | 100% (800 de 800) |
+| Thresholds passaram? | Sim: p95 < 300 ms nos dois endpoints e falhas < 1% |
+
+**SLO cumprido** nesta medição: p95 abaixo de 300 ms e falhas abaixo de 1%. Foram 200
+iterações com 5 usuários virtuais, em 5,4 s, a cerca de 75 requisições por segundo.
 
 ## Limites desta medição
 
