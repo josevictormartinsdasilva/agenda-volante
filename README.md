@@ -1,6 +1,6 @@
-  **Nível: Projeto B**
-
 # Agenda Volante
+
+**Nível: Projeto B**
 
 API de agendamento de aulas para instrutor de trânsito autônomo: uma agenda para quem
 trabalha em movimento. O aluno consulta os horários livres e reserva a própria aula,
@@ -24,8 +24,53 @@ curl http://localhost:3000/health
 # {"status":"ok"}
 ```
 
-Para mudar portas, senha do banco ou regras de negócio, copie `.env.example`
-para `.env` e ajuste. O `.env` nunca vai para o repositório.
+O Compose sobe **sem nenhum `.env`**: ele tem padrões para tudo (porta 3000, banco `agenda`,
+48 h de cancelamento, aula de 50 min). Para mudar portas, senha do banco ou regras de
+negócio, copie `.env.example` para `.env` e ajuste. O `.env` nunca vai para o repositório.
+
+Para parar e apagar os contêineres e os dados do banco:
+
+```bash
+docker compose down -v
+```
+
+### Experimente o fluxo principal
+
+Com a API no ar, o fluxo de ponta a ponta com `curl` (Git Bash, macOS ou Linux). Use uma
+data futura: a API recusa horário que já passou. O exemplo usa 10/03/2027, às 10h em
+Fortaleza (`13:00Z`, porque os horários trafegam em UTC).
+
+```bash
+# 1. Cadastra o aluno e anota o "id" da resposta
+curl -s -X POST http://localhost:3000/alunos \
+  -H 'content-type: application/json' -d '{"nome":"Ana"}'
+
+# 2. Registra um pacote de 10 aulas (troque <ALUNO_ID>)
+curl -s -X POST http://localhost:3000/alunos/<ALUNO_ID>/pacote \
+  -H 'content-type: application/json' -d '{"quantidade":10}'
+
+# 3. Instrutor publica dois horários (hora cheia)
+curl -s -X POST http://localhost:3000/disponibilidades \
+  -H 'content-type: application/json' \
+  -d '{"inicios":["2027-03-10T13:00:00.000Z","2027-03-10T14:00:00.000Z"]}'
+
+# 4. Aluno consulta os horários livres do dia
+curl -s 'http://localhost:3000/horarios-livres?data=2027-03-10'
+
+# 5. Aluno reserva um horário e anota o "id" da aula (consome 1 crédito: saldo 9)
+curl -s -X POST http://localhost:3000/aulas \
+  -H 'content-type: application/json' \
+  -d '{"alunoId":"<ALUNO_ID>","inicio":"2027-03-10T13:00:00.000Z"}'
+
+# 6. Instrutor consulta a agenda do dia
+curl -s 'http://localhost:3000/agenda?data=2027-03-10'
+
+# 7. Aluno cancela (com 48 h ou mais de antecedência, o crédito volta: saldo 10)
+curl -s -X POST http://localhost:3000/aulas/<AULA_ID>/cancelar
+```
+
+Reservar o mesmo horário de novo responde `409`; um horário não publicado, fora da hora
+cheia ou sem saldo responde `422`, sempre com `{"erro": "..."}` em português.
 
 ## Observabilidade
 
@@ -64,8 +109,17 @@ Com a API no ar (`docker compose up --build`), em outro terminal:
 npm run smoke   # k6 via Docker, sem instalar nada
 ```
 
-Mede o p95 de consultar horários livres e reservar. Detalhes, thresholds e o resultado
-medido em [`docs/desempenho.md`](docs/desempenho.md).
+Mede o p95 de consultar horários livres e reservar. Resultado medido em 13/11/2026
+(5 usuários virtuais, 200 iterações, API e Postgres no Docker local):
+
+| Métrica | Medido | Limite do SLO |
+|---|---|---|
+| p95 de `GET /horarios-livres` | 83,15 ms | < 300 ms |
+| p95 de `POST /aulas` | 137,88 ms | < 300 ms |
+| Falhas | 0,00% (0 de 403) | < 1% |
+
+SLO cumprido nesta medição. É um smoke na mesma máquina, não um teste de capacidade.
+Detalhes, thresholds e limites da medição em [`docs/desempenho.md`](docs/desempenho.md).
 
 ## API
 
@@ -166,6 +220,6 @@ Levantados na revisão final do código, em ordem aproximada de prioridade:
   `politica-cancelamento.ts`, e a janela de uma hora da reserva está fixa no caso de uso.
   Centralizar em `src/domain/horario.ts`; se `casos-de-uso.ts` crescer, separar um arquivo por
   caso de uso
-- **Testes e cobertura:** o ramo de erro 500 de `src/routes/erros-http.ts` (84% de cobertura)
-  não tem teste, e não há teste de concorrência para o saldo. `repositorios.ts` e `tipos.ts`
-  aparecem com 0% por serem só tipos; excluí-los da cobertura deixaria o relatório fiel
+- **Testes e cobertura:** não há teste de concorrência para o saldo (R5 e R6). `repositorios.ts`
+  e `tipos.ts` aparecem com 0% por serem só tipos; excluí-los da cobertura deixaria o
+  relatório fiel
