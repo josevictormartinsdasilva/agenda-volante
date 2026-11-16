@@ -21,6 +21,7 @@ model Aluno {
   aulas  Aula[]
 }
 
+// R5: `CHECK (saldo >= 0)` está na migration `saldo_nao_negativo` (o Prisma não o expressa aqui).
 model Pacote {
   alunoId String @id
   saldo   Int

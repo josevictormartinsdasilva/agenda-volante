@@ -1,15 +1,20 @@
 import { cancelarAula, reservarAula } from '../domain/agenda.js';
-import { AlunoNaoEncontrado, AulaNaoEncontrada, HorarioForaDaGrade } from '../domain/erros.js';
+import {
+  AlunoNaoEncontrado,
+  AulaJaCancelada,
+  AulaNaoEncontrada,
+  HorarioForaDaGrade,
+} from '../domain/erros.js';
 import { ehHoraCheia, intervaloDoDia } from '../domain/horario.js';
 import { horariosLivres } from '../domain/horarios-livres.js';
 import type { PoliticaDeCancelamento } from '../domain/politica-cancelamento.js';
-import type { Repositorios } from '../domain/repositorios.js';
+import type { Armazenamento } from '../domain/repositorios.js';
 import type { Aluno, Aula, Pacote } from '../domain/tipos.js';
 
 const MS_POR_HORA = 3_600_000;
 
 export interface Dependencias {
-  repositorios: Repositorios;
+  repositorios: Armazenamento;
   duracaoAulaMinutos: number;
   politica: PoliticaDeCancelamento;
   /** Relógio e gerador de id injetados: os testes controlam o tempo e os ids. */
@@ -33,9 +38,12 @@ export interface CasosDeUso {
  * Orquestra o fluxo principal: busca os dados nos repositórios, chama as funções
  * puras do domínio e persiste o resultado. As regras ficam no domínio, não aqui.
  *
- * Ler, validar e gravar são passos separados, então duas reservas simultâneas podem
- * passar juntas pela checagem. Quem decide é `aulas.salvar`, que recusa o segundo
- * horário (R3), e a aula é gravada antes do pacote: a reserva perdedora não gasta crédito.
+ * Ler, validar e gravar são passos separados, então duas requisições simultâneas podem
+ * passar juntas pela checagem do domínio, que valida um retrato já lido. Por isso a
+ * gravação reaplica cada condição de forma atômica no armazenamento (ADR 0002):
+ * `aulas.salvar` recusa o segundo horário (R3), `pacotes.debitar` recusa o débito sem
+ * saldo (R5) e `aulas.cancelar` recusa o segundo cancelamento (R6). Aula e pacote são
+ * gravados na mesma transação: se uma gravação falha, a outra é desfeita.
  */
 export function criarCasosDeUso(dep: Dependencias): CasosDeUso {
   const { repositorios: repos } = dep;
@@ -46,8 +54,8 @@ export function criarCasosDeUso(dep: Dependencias): CasosDeUso {
     return aluno;
   }
 
-  async function pacoteDoAluno(alunoId: string): Promise<Pacote> {
-    return (await repos.pacotes.buscarPorAluno(alunoId)) ?? { alunoId, saldo: 0 };
+  async function pacoteDoAluno(alunoId: string, pacotes = repos.pacotes): Promise<Pacote> {
+    return (await pacotes.buscarPorAluno(alunoId)) ?? { alunoId, saldo: 0 };
   }
 
   return {
@@ -59,10 +67,7 @@ export function criarCasosDeUso(dep: Dependencias): CasosDeUso {
 
     async registrarPacote(alunoId, quantidade) {
       await exigirAluno(alunoId);
-      const atual = await pacoteDoAluno(alunoId);
-      const pacote: Pacote = { alunoId, saldo: atual.saldo + quantidade };
-      await repos.pacotes.salvar(pacote);
-      return pacote;
+      return repos.pacotes.creditar(alunoId, quantidade);
     },
 
     async publicarDisponibilidade(inicios) {
@@ -88,7 +93,8 @@ export function criarCasosDeUso(dep: Dependencias): CasosDeUso {
         pacoteDoAluno(alunoId),
       ]);
 
-      const resultado = reservarAula(
+      // Valida R1 a R5 no retrato lido: no caso comum, dá o erro certo antes de gravar.
+      const { aula } = reservarAula(
         {
           id: dep.gerarId(),
           alunoId,
@@ -101,9 +107,11 @@ export function criarCasosDeUso(dep: Dependencias): CasosDeUso {
         { duracaoAulaMinutos: dep.duracaoAulaMinutos },
       );
 
-      await repos.aulas.salvar(resultado.aula);
-      await repos.pacotes.salvar(resultado.pacote);
-      return resultado;
+      // O saldo devolvido é o que o armazenamento debitou, não o calculado sobre o retrato.
+      return repos.emTransacao(async (tx) => {
+        await tx.aulas.salvar(aula);
+        return { aula, pacote: await tx.pacotes.debitar(alunoId) };
+      });
     },
 
     async consultarAgenda(data) {
@@ -118,14 +126,20 @@ export function criarCasosDeUso(dep: Dependencias): CasosDeUso {
       const aula = await repos.aulas.buscarPorId(aulaId);
       if (!aula) throw new AulaNaoEncontrada();
 
-      const resultado = cancelarAula(
+      const { aula: cancelada, creditoDevolvido } = cancelarAula(
         { aula, pacote: await pacoteDoAluno(aula.alunoId), agora: dep.agora() },
         dep.politica,
       );
 
-      await repos.aulas.salvar(resultado.aula);
-      await repos.pacotes.salvar(resultado.pacote);
-      return resultado;
+      return repos.emTransacao(async (tx) => {
+        // Outro cancelamento pode ter chegado depois da leitura acima: só quem de fato
+        // muda o status devolve o crédito.
+        if (!(await tx.aulas.cancelar(aula.id))) throw new AulaJaCancelada();
+        const pacote = creditoDevolvido
+          ? await tx.pacotes.creditar(aula.alunoId, 1)
+          : await pacoteDoAluno(aula.alunoId, tx.pacotes);
+        return { aula: cancelada, pacote, creditoDevolvido };
+      });
     },
   };
 }

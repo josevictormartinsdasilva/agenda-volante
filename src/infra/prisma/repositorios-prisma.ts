@@ -1,7 +1,8 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
-import { HorarioOcupado } from '../../domain/erros.js';
+import { HorarioOcupado, SaldoInsuficiente } from '../../domain/erros.js';
 import type {
   AlunoRepository,
+  Armazenamento,
   AulaRepository,
   DisponibilidadeRepository,
   PacoteRepository,
@@ -12,8 +13,14 @@ import type { Aluno, Aula, Pacote } from '../../domain/tipos.js';
 /** Violação de índice único (no nosso caso, o parcial de R3 em Aula.inicio). */
 const VIOLACAO_DE_UNICIDADE = 'P2002';
 
+/**
+ * O que os repositórios usam do Prisma: o client normal ou o de dentro de uma transação.
+ * Os dois têm os mesmos modelos; o `PrismaClient` só acrescenta `$transaction` e afins.
+ */
+type Db = Prisma.TransactionClient;
+
 class AlunoPrisma implements AlunoRepository {
-  constructor(private readonly db: PrismaClient) {}
+  constructor(private readonly db: Db) {}
 
   async salvar(aluno: Aluno): Promise<void> {
     await this.db.aluno.upsert({
@@ -30,14 +37,27 @@ class AlunoPrisma implements AlunoRepository {
 }
 
 class PacotePrisma implements PacoteRepository {
-  constructor(private readonly db: PrismaClient) {}
+  constructor(private readonly db: Db) {}
 
-  async salvar(pacote: Pacote): Promise<void> {
-    await this.db.pacote.upsert({
-      where: { alunoId: pacote.alunoId },
-      create: { alunoId: pacote.alunoId, saldo: pacote.saldo },
-      update: { saldo: pacote.saldo },
+  async creditar(alunoId: string, quantidade: number): Promise<Pacote> {
+    // `increment` vira `saldo = saldo + n` no SQL: a soma é feita pelo banco, não aqui.
+    return this.db.pacote.upsert({
+      where: { alunoId },
+      create: { alunoId, saldo: quantidade },
+      update: { saldo: { increment: quantidade } },
     });
+  }
+
+  async debitar(alunoId: string): Promise<Pacote> {
+    // Um único `UPDATE ... WHERE saldo >= 1 RETURNING`: checar e debitar são atômicos.
+    // De dois débitos simultâneos do último crédito, o segundo espera o primeiro,
+    // reavalia o WHERE e não encontra linha.
+    const [pacote] = await this.db.pacote.updateManyAndReturn({
+      where: { alunoId, saldo: { gte: 1 } },
+      data: { saldo: { decrement: 1 } },
+    });
+    if (!pacote) throw new SaldoInsuficiente();
+    return pacote;
   }
 
   async buscarPorAluno(alunoId: string): Promise<Pacote | undefined> {
@@ -47,7 +67,7 @@ class PacotePrisma implements PacoteRepository {
 }
 
 class DisponibilidadePrisma implements DisponibilidadeRepository {
-  constructor(private readonly db: PrismaClient) {}
+  constructor(private readonly db: Db) {}
 
   async publicar(inicios: readonly Date[]): Promise<void> {
     await this.db.disponibilidade.createMany({
@@ -66,7 +86,7 @@ class DisponibilidadePrisma implements DisponibilidadeRepository {
 }
 
 class AulaPrisma implements AulaRepository {
-  constructor(private readonly db: PrismaClient) {}
+  constructor(private readonly db: Db) {}
 
   async salvar(aula: Aula): Promise<void> {
     const { id, ...dados } = aula;
@@ -83,6 +103,15 @@ class AulaPrisma implements AulaRepository {
     }
   }
 
+  async cancelar(id: string): Promise<boolean> {
+    // O `status: 'reservada'` no WHERE é o que impede o cancelamento em dobro.
+    const { count } = await this.db.aula.updateMany({
+      where: { id, status: 'reservada' },
+      data: { status: 'cancelada' },
+    });
+    return count === 1;
+  }
+
   async buscarPorId(id: string): Promise<Aula | undefined> {
     const aula = await this.db.aula.findUnique({ where: { id } });
     return aula ?? undefined;
@@ -96,11 +125,20 @@ class AulaPrisma implements AulaRepository {
   }
 }
 
-export function criarRepositoriosPrisma(db: PrismaClient): Repositorios {
+function montar(db: Db): Repositorios {
   return {
     alunos: new AlunoPrisma(db),
     pacotes: new PacotePrisma(db),
     disponibilidade: new DisponibilidadePrisma(db),
     aulas: new AulaPrisma(db),
+  };
+}
+
+export function criarRepositoriosPrisma(db: PrismaClient): Armazenamento {
+  return {
+    ...montar(db),
+    // Transação interativa do Prisma: `trabalho` recebe repositórios ligados a ela;
+    // se ele lançar, o Prisma faz ROLLBACK e nada do que gravou permanece.
+    emTransacao: (trabalho) => db.$transaction((tx) => trabalho(montar(tx))),
   };
 }

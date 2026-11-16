@@ -24,5 +24,6 @@ RUN npx prisma generate
 COPY --from=build /app/dist ./dist
 USER node
 EXPOSE 3000
-# Aplica as migrations pendentes e só então sobe a API
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node dist/server.js"]
+# Aplica as migrations pendentes e só então sobe a API. O `exec` troca o shell pelo Node,
+# que passa a ser o processo 1 e recebe o SIGTERM do `docker stop` (encerramento limpo).
+CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && exec node dist/server.js"]
