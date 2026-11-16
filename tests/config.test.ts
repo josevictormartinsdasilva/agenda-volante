@@ -39,6 +39,17 @@ describe('carregarConfig', () => {
     expect(carregarConfig({ NODE_ENV: 'development' }).databaseUrl).toBeUndefined();
   });
 
+  it('sessão dura 7 dias por padrão e a duração é configurável', () => {
+    expect(carregarConfig({}).sessaoDuracaoHoras).toBe(168);
+    expect(carregarConfig({ SESSAO_DURACAO_HORAS: '12' }).sessaoDuracaoHoras).toBe(12);
+  });
+
+  it('nenhuma credencial de conta vem do ambiente', () => {
+    const config = carregarConfig({ INSTRUTOR_EMAIL: 'x@exemplo.com', INSTRUTOR_SENHA: 'qualquer-senha' });
+
+    expect(JSON.stringify(config)).not.toContain('qualquer-senha');
+  });
+
   it('falha cedo com valor inválido, em vez de subir com configuração errada', () => {
     expect(() => carregarConfig({ PORT: 'abc' })).toThrow(/PORT inválida/);
   });

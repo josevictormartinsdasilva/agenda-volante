@@ -1,8 +1,11 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import type { Autenticacao } from './application/autenticacao.js';
 import type { CasosDeUso } from './application/casos-de-uso.js';
 import type { Config } from './config.js';
 import { instrumentar } from './observabilidade/metricas.js';
 import { agendaRoutes } from './routes/agenda.js';
+import { autenticacaoRoutes } from './routes/autenticacao.js';
+import { criarGuarda } from './routes/autorizacao.js';
 import { tratarErro } from './routes/erros-http.js';
 import { healthRoutes } from './routes/health.js';
 import { metricasRoutes } from './routes/metricas.js';
@@ -17,6 +20,7 @@ import { metricasRoutes } from './routes/metricas.js';
 export function buildApp(
   config: Pick<Config, 'logLevel'>,
   casos: CasosDeUso,
+  autenticacao: Autenticacao,
   verificarArmazenamento: () => Promise<void> = async () => {},
 ): FastifyInstance {
   // O logger do Fastify é o pino: logs estruturados em JSON desde o primeiro dia.
@@ -25,6 +29,10 @@ export function buildApp(
   const registry = instrumentar(app);
   app.register(healthRoutes(verificarArmazenamento));
   app.register(metricasRoutes(registry));
-  app.register(agendaRoutes(casos));
+  // Declarar a propriedade antes mantém o formato do objeto de requisição estável.
+  app.decorateRequest('identidade', null);
+  const guarda = criarGuarda(autenticacao);
+  app.register(autenticacaoRoutes(autenticacao, guarda));
+  app.register(agendaRoutes(casos, guarda));
   return app;
 }

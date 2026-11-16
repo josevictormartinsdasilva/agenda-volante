@@ -15,10 +15,43 @@ enum StatusAula {
 }
 
 model Aluno {
-  id     String  @id
-  nome   String
-  pacote Pacote?
-  aulas  Aula[]
+  id      String   @id
+  nome    String
+  pacote  Pacote?
+  aulas   Aula[]
+  usuario Usuario?
+}
+
+enum Papel {
+  admin
+  instrutor
+  aluno
+}
+
+/// Conta de acesso. O e-mail é dado pessoal (ver docs/lgpd.md); a senha nunca é guardada,
+/// só o hash (scrypt).
+model Usuario {
+  id        String   @id
+  email     String   @unique
+  senhaHash String
+  papel     Papel
+  alunoId   String?  @unique
+  aluno     Aluno?   @relation(fields: [alunoId], references: [id])
+  sessoes   Sessao[]
+}
+
+/// Sessão de login. A chave é o SHA-256 do token: o token em si nunca é gravado.
+/// `papel` e `alunoId` são cópias da conta, para identificar a requisição com uma consulta.
+model Sessao {
+  tokenHash String   @id
+  usuarioId String
+  papel     Papel
+  alunoId   String?
+  expiraEm  DateTime @db.Timestamptz(3)
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([expiraEm])
 }
 
 // R5: `CHECK (saldo >= 0)` está na migration `saldo_nao_negativo` (o Prisma não o expressa aqui).

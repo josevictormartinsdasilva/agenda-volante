@@ -1,22 +1,22 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
-import { criarAmbiente } from './helpers.js';
+import { cabecalhoDoInstrutor, criarAmbiente, criarApp } from './helpers.js';
 
 describe('tradução de erros para HTTP', () => {
   let app: FastifyInstance;
   afterEach(() => app.close());
 
   it('responde 400 (e não 500) quando o cliente manda JSON sem corpo', async () => {
-    const { casos } = criarAmbiente();
-    app = buildApp({ logLevel: 'silent' }, casos);
+    const teste = criarApp();
+    app = teste.app;
 
     // Muitos clientes (Postman, wrappers de fetch) enviam este cabeçalho em todo POST,
     // inclusive em /aulas/:id/cancelar, que não tem corpo.
     const resposta = await app.inject({
       method: 'POST',
       url: '/aulas/qualquer-id/cancelar',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...(await teste.comoInstrutor()) },
     });
 
     expect(resposta.statusCode).toBe(400);
@@ -24,8 +24,7 @@ describe('tradução de erros para HTTP', () => {
   });
 
   it('responde 400 quando o JSON enviado é malformado', async () => {
-    const { casos } = criarAmbiente();
-    app = buildApp({ logLevel: 'silent' }, casos);
+    app = criarApp().app;
 
     const resposta = await app.inject({
       method: 'POST',
@@ -38,16 +37,21 @@ describe('tradução de erros para HTTP', () => {
   });
 
   it('responde 500 genérico, sem vazar a mensagem, para erro inesperado', async () => {
-    const { casos } = criarAmbiente();
+    const ambiente = criarAmbiente();
+    const { casos } = ambiente;
     const comFalha = {
       ...casos,
       cancelarAula: async () => {
         throw new Error('senha do banco: segredo');
       },
     };
-    app = buildApp({ logLevel: 'silent' }, comFalha);
+    app = buildApp({ logLevel: 'silent' }, comFalha, ambiente.autenticacao);
 
-    const resposta = await app.inject({ method: 'POST', url: '/aulas/qualquer-id/cancelar' });
+    const resposta = await app.inject({
+      method: 'POST',
+      url: '/aulas/qualquer-id/cancelar',
+      headers: await cabecalhoDoInstrutor(ambiente),
+    });
 
     expect(resposta.statusCode).toBe(500);
     expect(resposta.json()).toEqual({ erro: 'Erro interno' });

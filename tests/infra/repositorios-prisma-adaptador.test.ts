@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
-import { HorarioOcupado, SaldoInsuficiente } from '../../src/domain/erros.js';
+import { EmailJaCadastrado, HorarioOcupado, SaldoInsuficiente } from '../../src/domain/erros.js';
 import { criarRepositoriosPrisma } from '../../src/infra/prisma/repositorios-prisma.js';
 
 /**
@@ -14,7 +14,9 @@ const AULA = { id: 'a1', alunoId: 'ana', inicio: H10, fim: new Date('2026-11-20T
 
 function criarDbFalso() {
   const db = {
-    aluno: { upsert: vi.fn(), findUnique: vi.fn() },
+    aluno: { upsert: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
+    usuario: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
+    sessao: { create: vi.fn(), findUnique: vi.fn(), deleteMany: vi.fn() },
     pacote: { upsert: vi.fn(), updateManyAndReturn: vi.fn(), findUnique: vi.fn() },
     disponibilidade: { createMany: vi.fn(), findMany: vi.fn() },
     aula: { upsert: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
@@ -34,6 +36,46 @@ describe('adaptador Prisma', () => {
     db.aula.upsert.mockRejectedValue(erroPrisma('P2002'));
 
     await expect(repos.aulas.salvar(AULA)).rejects.toBeInstanceOf(HorarioOcupado);
+  });
+
+  it('conta: traduz a violação do índice único do e-mail em EmailJaCadastrado e repassa o resto', async () => {
+    const { db, repos } = criarDbFalso();
+    const conta = { id: 'u1', email: 'ana@exemplo.com', senhaHash: 'h', papel: 'aluno', alunoId: 'ana' } as const;
+    const falha = erroPrisma('P2003');
+    db.usuario.create.mockRejectedValueOnce(erroPrisma('P2002')).mockRejectedValueOnce(falha);
+
+    await expect(repos.usuarios.criar(conta)).rejects.toBeInstanceOf(EmailJaCadastrado);
+    await expect(repos.usuarios.criar(conta)).rejects.toBe(falha);
+    expect(db.usuario.create).toHaveBeenCalledWith({ data: conta });
+  });
+
+  it('conta e sessão: devolvem undefined quando não há linha, e consultam com o filtro certo', async () => {
+    const { db, repos } = criarDbFalso();
+    db.usuario.findUnique.mockResolvedValue(null);
+    db.usuario.findMany.mockResolvedValue([]);
+    db.sessao.findUnique.mockResolvedValue(null);
+    db.aluno.findMany.mockResolvedValue([{ id: 'ana', nome: 'Ana' }]);
+
+    expect(await repos.usuarios.buscarPorEmail('x@exemplo.com')).toBeUndefined();
+    expect(await repos.usuarios.listarPorPapel('aluno')).toEqual([]);
+    expect(await repos.sessoes.buscar('resumo')).toBeUndefined();
+    expect(await repos.alunos.listar()).toEqual([{ id: 'ana', nome: 'Ana' }]);
+
+    expect(db.usuario.findUnique).toHaveBeenCalledWith({ where: { email: 'x@exemplo.com' } });
+    expect(db.usuario.findMany).toHaveBeenCalledWith({ where: { papel: 'aluno' }, orderBy: { email: 'asc' } });
+    expect(db.sessao.findUnique).toHaveBeenCalledWith({ where: { tokenHash: 'resumo' } });
+    expect(db.aluno.findMany).toHaveBeenCalledWith({ orderBy: { nome: 'asc' } });
+  });
+
+  it('sessão: grava a linha e remove com deleteMany, que não lança se ela já não existe', async () => {
+    const { db, repos } = criarDbFalso();
+    const sessao = { tokenHash: 'resumo', usuarioId: 'u1', papel: 'aluno', alunoId: 'ana', expiraEm: H10 } as const;
+
+    await repos.sessoes.salvar(sessao);
+    await repos.sessoes.remover('resumo');
+
+    expect(db.sessao.create).toHaveBeenCalledWith({ data: sessao });
+    expect(db.sessao.deleteMany).toHaveBeenCalledWith({ where: { tokenHash: 'resumo' } });
   });
 
   it('repassa qualquer outro erro sem disfarçá-lo de horário ocupado', async () => {

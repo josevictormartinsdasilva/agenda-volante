@@ -4,11 +4,13 @@ import ajvFormats from 'ajv-formats';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
-import { buildApp } from '../../src/app.js';
 import { agendaRoutes } from '../../src/routes/agenda.js';
-import { criarAmbiente } from '../helpers.js';
+import { autenticacaoRoutes } from '../../src/routes/autenticacao.js';
+import { criarGuarda } from '../../src/routes/autorizacao.js';
+import { criarAmbiente, criarApp } from '../helpers.js';
 
 type Json = unknown;
+type Metodo = 'GET' | 'POST' | 'DELETE';
 interface Midia {
   content?: { 'application/json'?: { schema?: Json } };
 }
@@ -21,6 +23,8 @@ interface Parametro {
 interface Operacao {
   parameters?: Parametro[];
   requestBody?: Midia;
+  /** Lista vazia: operação pública. Com itens: exige o token de sessão. */
+  security?: object[];
   responses: Record<string, Midia>;
 }
 type Caminhos = Record<string, Record<string, Operacao>>;
@@ -44,6 +48,15 @@ function resolverRefs(no: Json): Json {
 }
 
 const contrato = resolverRefs(bruto) as { paths: Caminhos };
+
+/** Todas as operações do contrato, uma por (caminho, método). */
+const operacoes = Object.entries(contrato.paths).flatMap(([caminho, metodos]) =>
+  Object.entries(metodos).map(([metodo, operacao]) => ({
+    caminho,
+    metodo: metodo.toUpperCase() as Metodo,
+    operacao,
+  })),
+);
 
 /** Tira o que só documenta (não valida), para comparar schema com schema. */
 function semAnotacoes(no: Json): Json {
@@ -75,23 +88,24 @@ const urlDoFastify = (caminho: string) => caminho.replace(/\{(\w+)\}/g, ':$1');
 
 describe('aderência da API ao docs/openapi.yaml', () => {
   let app: FastifyInstance;
+  let teste: ReturnType<typeof criarApp>;
 
   beforeEach(() => {
-    const { casos } = criarAmbiente();
-    app = buildApp({ logLevel: 'silent' }, casos);
+    teste = criarApp();
+    app = teste.app;
   });
   afterEach(() => app.close());
 
+  it('o contrato tem as 11 operações da API', () => {
+    // Sem isto, um contrato vazio faria os testes abaixo passarem sem conferir nada.
+    expect(operacoes).toHaveLength(11);
+  });
+
   it('toda operação documentada existe como rota da aplicação', async () => {
     await app.ready(); // as rotas entram por plugin e só existem depois do ready
-    for (const [caminho, metodos] of Object.entries(contrato.paths)) {
-      for (const metodo of Object.keys(metodos)) {
-        const existe = app.hasRoute({
-          method: metodo.toUpperCase() as 'GET' | 'POST',
-          url: urlDoFastify(caminho),
-        });
-        expect(existe, `${metodo.toUpperCase()} ${caminho} não existe na aplicação`).toBe(true);
-      }
+    for (const { caminho, metodo } of operacoes) {
+      const existe = app.hasRoute({ method: metodo, url: urlDoFastify(caminho) });
+      expect(existe, `${metodo} ${caminho} não existe na aplicação`).toBe(true);
     }
   });
 
@@ -102,63 +116,112 @@ describe('aderência da API ao docs/openapi.yaml', () => {
     rotas.addHook('onRoute', (rota) => {
       registradas.set(`${String(rota.method)} ${rota.url}`, { ...rota.schema });
     });
-    await rotas.register(agendaRoutes(criarAmbiente().casos));
+    const { casos, autenticacao } = criarAmbiente();
+    const guarda = criarGuarda(autenticacao);
+    await rotas.register(autenticacaoRoutes(autenticacao, guarda));
+    await rotas.register(agendaRoutes(casos, guarda));
     await rotas.ready();
 
-    let comparadas = 0;
-    for (const [caminho, metodos] of Object.entries(contrato.paths)) {
-      for (const [metodo, operacao] of Object.entries(metodos)) {
-        const rota = `${metodo.toUpperCase()} ${urlDoFastify(caminho)}`;
-        const doContrato = {
-          body: operacao.requestBody?.content?.['application/json']?.schema,
-          params: schemaDosParametros(operacao, 'path'),
-          querystring: schemaDosParametros(operacao, 'query'),
-        };
-        const daRota = registradas.get(rota) ?? {};
+    for (const { caminho, metodo, operacao } of operacoes) {
+      const rota = `${metodo} ${urlDoFastify(caminho)}`;
+      const doContrato = {
+        body: operacao.requestBody?.content?.['application/json']?.schema,
+        params: schemaDosParametros(operacao, 'path'),
+        querystring: schemaDosParametros(operacao, 'query'),
+      };
+      const daRota = registradas.get(rota) ?? {};
 
-        expect(
-          semAnotacoes({ body: daRota.body, params: daRota.params, querystring: daRota.querystring }),
-          `a validação de ${rota} diverge do contrato`,
-        ).toEqual(semAnotacoes(doContrato));
-        comparadas++;
-      }
+      expect(
+        semAnotacoes({ body: daRota.body, params: daRota.params, querystring: daRota.querystring }),
+        `a validação de ${rota} diverge do contrato`,
+      ).toEqual(semAnotacoes(doContrato));
     }
-    expect(comparadas).toBe(7); // sem isto, um contrato vazio passaria
     await rotas.close();
+  });
+
+  it('exige login exatamente nas operações que o contrato marca com security', async () => {
+    for (const { caminho, metodo, operacao } of operacoes) {
+      const resposta = await app.inject({ method: metodo, url: caminho.replace(/\{\w+\}/g, 'x') });
+      const protegida = (operacao.security ?? []).length > 0;
+
+      expect(operacao.security, `${metodo} ${caminho} sem security declarado`).toBeDefined();
+      expect(
+        resposta.statusCode === 401,
+        `${metodo} ${caminho}: contrato diz protegida=${protegida}, API respondeu ${resposta.statusCode}`,
+      ).toBe(protegida);
+    }
   });
 
   it('cada resposta do fluxo tem status documentado e corpo no formato do contrato', async () => {
     const ajv = new Ajv2020({ allErrors: true, strict: false });
     ajvFormats.default(ajv);
 
-    const chamar = async (caminho: string, metodo: 'get' | 'post', url: string, payload?: object) => ({
-      caminho,
-      metodo,
-      resposta: await app.inject({ method: metodo.toUpperCase() as 'GET' | 'POST', url, payload }),
+    const chamar = async (
+      caminho: string,
+      metodo: Metodo,
+      url: string,
+      opcoes: { headers?: { authorization: string }; payload?: object } = {},
+    ) => ({ caminho, metodo, resposta: await app.inject({ method: metodo, url, ...opcoes }) });
+
+    const ana = { nome: 'Ana', email: 'ana@exemplo.com', senha: 'senha-da-ana' };
+    const cadastro = await chamar('/alunos', 'POST', '/alunos', { payload: ana });
+    const repetido = await chamar('/alunos', 'POST', '/alunos', { payload: ana });
+    const { id } = cadastro.resposta.json<{ id: string }>();
+    const login = await chamar('/sessoes', 'POST', '/sessoes', {
+      payload: { email: ana.email, senha: ana.senha },
+    });
+    const loginErrado = await chamar('/sessoes', 'POST', '/sessoes', {
+      payload: { email: ana.email, senha: 'senha-errada' },
+    });
+    const aluno = { authorization: `Bearer ${login.resposta.json<{ token: string }>().token}` };
+    const instrutor = await teste.comoInstrutor();
+    const admin = await teste.comoAdmin();
+    const novoInstrutor = { email: 'outro.instrutor@exemplo.com', senha: 'senha-do-outro' };
+    const instrutorCriado = await chamar('/instrutores', 'POST', '/instrutores', {
+      headers: admin,
+      payload: novoInstrutor,
+    });
+    const instrutorRepetido = await chamar('/instrutores', 'POST', '/instrutores', {
+      headers: admin,
+      payload: novoInstrutor,
+    });
+    const instrutorPorAluno = await chamar('/instrutores', 'POST', '/instrutores', {
+      headers: aluno,
+      payload: novoInstrutor,
     });
 
-    const aluno = await chamar('/alunos', 'post', '/alunos', { nome: 'Ana' });
-    const { id } = aluno.resposta.json<{ id: string }>();
     const reservar = (inicio: string) =>
-      chamar('/aulas', 'post', '/aulas', { alunoId: id, inicio });
+      chamar('/aulas', 'POST', '/aulas', { headers: aluno, payload: { inicio } });
 
-    const pacote = await chamar('/alunos/{id}/pacote', 'post', `/alunos/${id}/pacote`, {
-      quantidade: 1,
+    const alunos = await chamar('/alunos', 'GET', '/alunos', { headers: instrutor });
+    const pacote = await chamar('/alunos/{id}/pacote', 'POST', `/alunos/${id}/pacote`, {
+      headers: instrutor,
+      payload: { quantidade: 1 },
     });
-    const publicar = await chamar('/disponibilidades', 'post', '/disponibilidades', {
-      inicios: [H10, H11],
+    const publicar = await chamar('/disponibilidades', 'POST', '/disponibilidades', {
+      headers: instrutor,
+      payload: { inicios: [H10, H11] },
     });
-    const livres = await chamar('/horarios-livres', 'get', '/horarios-livres?data=2026-11-20');
+    const livres = await chamar('/horarios-livres', 'GET', '/horarios-livres?data=2026-11-20', {
+      headers: aluno,
+    });
     const reserva = await reservar(H10);
     const ocupado = await reservar(H10);
     const semSaldo = await reservar(H11);
-    const agenda = await chamar('/agenda', 'get', '/agenda?data=2026-11-20');
+    const agenda = await chamar('/agenda', 'GET', '/agenda?data=2026-11-20', { headers: instrutor });
     const { aula } = reserva.resposta.json<{ aula: { id: string } }>();
     const cancelar = () =>
-      chamar('/aulas/{id}/cancelar', 'post', `/aulas/${aula.id}/cancelar`);
+      chamar('/aulas/{id}/cancelar', 'POST', `/aulas/${aula.id}/cancelar`, { headers: aluno });
 
     const observadas = [
-      aluno,
+      cadastro,
+      repetido,
+      login,
+      loginErrado,
+      instrutorCriado,
+      instrutorRepetido,
+      instrutorPorAluno,
+      alunos,
       pacote,
       publicar,
       livres,
@@ -168,20 +231,28 @@ describe('aderência da API ao docs/openapi.yaml', () => {
       agenda,
       await cancelar(),
       await cancelar(),
-      await chamar('/aulas/{id}/cancelar', 'post', '/aulas/fantasma/cancelar'),
-      await chamar('/alunos/{id}/pacote', 'post', '/alunos/fantasma/pacote', { quantidade: 1 }),
-      await chamar('/agenda', 'get', '/agenda?data=amanha'),
-      await chamar('/alunos', 'post', '/alunos', { nome: '' }),
+      await chamar('/aulas/{id}/cancelar', 'POST', '/aulas/fantasma/cancelar', { headers: aluno }),
+      await chamar('/alunos/{id}/pacote', 'POST', '/alunos/fantasma/pacote', {
+        headers: instrutor,
+        payload: { quantidade: 1 },
+      }),
+      await chamar('/agenda', 'GET', '/agenda?data=amanha', { headers: instrutor }),
+      await chamar('/agenda', 'GET', '/agenda?data=2026-11-20', { headers: aluno }),
+      await chamar('/agenda', 'GET', '/agenda?data=2026-11-20'),
+      await chamar('/alunos', 'POST', '/alunos', { payload: { nome: '' } }),
+      await chamar('/sessoes/atual', 'DELETE', '/sessoes/atual', { headers: aluno }),
     ];
 
     // Sem isto o teste passaria mesmo que o fluxo falhasse: confirma cada caminho exercitado.
     expect(observadas.map((o) => o.resposta.statusCode)).toEqual([
-      201, 200, 204, 200, 201, 409, 422, 200, 200, 409, 404, 404, 400, 400,
+      201, 409, 201, 401, 201, 409, 403, 200, 200, 204, 200, 201, 409, 422, 200, 200, 409, 404, 404, 400, 403,
+      401, 400, 204,
     ]);
 
     for (const { caminho, metodo, resposta } of observadas) {
-      const onde = `${metodo.toUpperCase()} ${caminho} → ${resposta.statusCode}`;
-      const documentada = contrato.paths[caminho]?.[metodo]?.responses[String(resposta.statusCode)];
+      const onde = `${metodo} ${caminho} → ${resposta.statusCode}`;
+      const documentada =
+        contrato.paths[caminho]?.[metodo.toLowerCase()]?.responses[String(resposta.statusCode)];
       expect(documentada, `${onde} não está documentado`).toBeDefined();
 
       const schema = documentada?.content?.['application/json']?.schema;

@@ -40,36 +40,68 @@ Com a API no ar, o fluxo de ponta a ponta com `curl` (Git Bash, macOS ou Linux).
 data futura: a API recusa horário que já passou. O exemplo usa 10/03/2027, às 10h em
 Fortaleza (`13:00Z`, porque os horários trafegam em UTC).
 
-```bash
-# 1. Cadastra o aluno e anota o "id" da resposta
-curl -s -X POST http://localhost:3000/alunos \
-  -H 'content-type: application/json' -d '{"nome":"Ana"}'
+A API exige login, e nenhuma conta vem pronta: nem no `.env`, nem no Compose. A primeira
+é a do **administrador**, criada por um comando que pergunta e-mail e senha no terminal
+(a senha não aparece na tela). Com a API no ar:
 
-# 2. Registra um pacote de 10 aulas (troque <ALUNO_ID>)
-curl -s -X POST http://localhost:3000/alunos/<ALUNO_ID>/pacote \
+```bash
+docker compose exec api npm run admin:criar
+```
+
+O administrador só cadastra instrutores; quem opera a agenda é o instrutor.
+
+```bash
+# 1. Login do administrador (com o e-mail e a senha do comando acima); anote o "token"
+curl -s -X POST http://localhost:3000/sessoes -H 'content-type: application/json' \
+  -d '{"email":"<EMAIL_DO_ADMIN>","senha":"<SENHA_DO_ADMIN>"}'
+ADMIN='authorization: Bearer <TOKEN_DO_ADMIN>'
+
+# 2. O administrador cadastra o instrutor
+curl -s -X POST http://localhost:3000/instrutores -H "$ADMIN" \
+  -H 'content-type: application/json' \
+  -d '{"email":"instrutor@exemplo.com","senha":"senha-do-instrutor"}'
+
+# 3. O aluno cria a própria conta; anote o "id" da resposta
+curl -s -X POST http://localhost:3000/alunos -H 'content-type: application/json' \
+  -d '{"nome":"Ana","email":"ana@exemplo.com","senha":"uma-senha-longa"}'
+
+# 4. Login do instrutor e do aluno; anote o "token" de cada resposta
+curl -s -X POST http://localhost:3000/sessoes -H 'content-type: application/json' \
+  -d '{"email":"instrutor@exemplo.com","senha":"senha-do-instrutor"}'
+curl -s -X POST http://localhost:3000/sessoes -H 'content-type: application/json' \
+  -d '{"email":"ana@exemplo.com","senha":"uma-senha-longa"}'
+
+INSTRUTOR='authorization: Bearer <TOKEN_DO_INSTRUTOR>'
+ALUNO='authorization: Bearer <TOKEN_DO_ALUNO>'
+
+# 5. Instrutor registra um pacote de 10 aulas (troque <ALUNO_ID>)
+curl -s -X POST http://localhost:3000/alunos/<ALUNO_ID>/pacote -H "$INSTRUTOR" \
   -H 'content-type: application/json' -d '{"quantidade":10}'
 
-# 3. Instrutor publica dois horários (hora cheia)
-curl -s -X POST http://localhost:3000/disponibilidades \
+# 6. Instrutor publica dois horários (hora cheia)
+curl -s -X POST http://localhost:3000/disponibilidades -H "$INSTRUTOR" \
   -H 'content-type: application/json' \
   -d '{"inicios":["2027-03-10T13:00:00.000Z","2027-03-10T14:00:00.000Z"]}'
 
-# 4. Aluno consulta os horários livres do dia
-curl -s 'http://localhost:3000/horarios-livres?data=2027-03-10'
+# 7. Aluno consulta os horários livres do dia
+curl -s 'http://localhost:3000/horarios-livres?data=2027-03-10' -H "$ALUNO"
 
-# 5. Aluno reserva um horário e anota o "id" da aula (consome 1 crédito: saldo 9)
-curl -s -X POST http://localhost:3000/aulas \
-  -H 'content-type: application/json' \
-  -d '{"alunoId":"<ALUNO_ID>","inicio":"2027-03-10T13:00:00.000Z"}'
+# 8. Aluno reserva para si e anota o "id" da aula (consome 1 crédito: saldo 9)
+curl -s -X POST http://localhost:3000/aulas -H "$ALUNO" \
+  -H 'content-type: application/json' -d '{"inicio":"2027-03-10T13:00:00.000Z"}'
 
-# 6. Instrutor consulta a agenda do dia
-curl -s 'http://localhost:3000/agenda?data=2027-03-10'
+# 9. Instrutor consulta a agenda do dia
+curl -s 'http://localhost:3000/agenda?data=2027-03-10' -H "$INSTRUTOR"
 
-# 7. Aluno cancela (com 48 h ou mais de antecedência, o crédito volta: saldo 10)
-curl -s -X POST http://localhost:3000/aulas/<AULA_ID>/cancelar
+# 10. Aluno cancela (com 48 h ou mais de antecedência, o crédito volta: saldo 10)
+curl -s -X POST http://localhost:3000/aulas/<AULA_ID>/cancelar -H "$ALUNO"
+
+# 11. Logout do aluno
+curl -s -X DELETE http://localhost:3000/sessoes/atual -H "$ALUNO"
 ```
 
-Reservar o mesmo horário de novo responde `409`; um horário não publicado, fora da hora
+Sem token a resposta é `401`; o aluno em rota do instrutor recebe `403`, e só mexe nas
+próprias aulas. Reservar o mesmo horário de novo responde `409`; um horário não publicado, fora da hora
 cheia ou sem saldo responde `422`, sempre com `{"erro": "..."}` em português.
 
 ## Observabilidade
@@ -114,10 +146,13 @@ resposta do fluxo contra o schema documentado para aquele status.
 Com a API no ar (`docker compose up --build`), em outro terminal:
 
 ```bash
-npm run smoke   # k6 via Docker, sem instalar nada
+# Precisa de um administrador (npm run admin:criar); o script cria o instrutor e o aluno
+ADMIN_EMAIL=<email> ADMIN_SENHA=<senha> npm run smoke   # k6 via Docker, sem instalar nada
 ```
 
-Mede o p95 de consultar horários livres e reservar. Resultado medido em 13/11/2026
+Mede o p95 de consultar horários livres e reservar. **A medição abaixo é da versão 0.1.0,
+anterior à autenticação; o script já faz login, mas ainda não foi rodado de novo.**
+Resultado medido em 13/11/2026
 (5 usuários virtuais, 200 iterações, API e Postgres no Docker local):
 
 | Métrica | Medido | Limite do SLO |
@@ -135,7 +170,9 @@ Fluxo principal (contrato completo em [`docs/openapi.yaml`](docs/openapi.yaml)):
 
 | Passo | Endpoint |
 |---|---|
-| Cadastrar aluno e registrar o pacote de aulas | `POST /alunos`, `POST /alunos/{id}/pacote` |
+| Administrador cadastra instrutor (o administrador nasce de `npm run admin:criar`) | `POST /instrutores` |
+| Aluno cria a conta; todos fazem login e logout | `POST /alunos`, `POST /sessoes`, `DELETE /sessoes/atual` |
+| Instrutor lista os alunos e registra o pacote de aulas | `GET /alunos`, `POST /alunos/{id}/pacote` |
 | Instrutor publica a disponibilidade | `POST /disponibilidades` |
 | Aluno consulta os horários livres | `GET /horarios-livres` |
 | Aluno reserva um horário | `POST /aulas` |
@@ -144,6 +181,11 @@ Fluxo principal (contrato completo em [`docs/openapi.yaml`](docs/openapi.yaml)):
 
 ## Decisões de design
 
+- **Autenticação:** e-mail e senha (scrypt), sessão por token guardada no banco e três
+  papéis: administrador (contas), instrutor (agenda) e aluno. O primeiro administrador nasce
+  de um comando de terminal, sem credencial em configuração. ADR em
+  [`docs/adr/0003-autenticacao-com-senha-e-sessao-no-banco.md`](docs/adr/0003-autenticacao-com-senha-e-sessao-no-banco.md);
+  dados pessoais em [`docs/lgpd.md`](docs/lgpd.md).
 - **Domínio puro** em `src/domain/`: regras R1 a R6 sem Fastify, Prisma ou I/O.
 - **Strategy** na política de cancelamento (R6), para trocar a regra sem mexer na reserva.
 - **Repository** com Prisma como Database Pattern: ADR em
@@ -159,14 +201,19 @@ src/          código da aplicação
 tests/        testes automatizados
 k6/           smoke test de desempenho
 prisma/       schema e migrations
-docs/         regras de negócio, ADR, OpenAPI, SLO, desempenho, uso de IA
+docs/         regras de negócio, ADR, OpenAPI, SLO, desempenho, LGPD, uso de IA
 .github/      pipeline de CI
 ```
 
 ## Próximos passos
 
-- Autenticação: hoje os endpoints do instrutor e o `/metrics` ficam abertos; em produção,
-  proteger o instrutor e expor `/metrics` só em rede interna
+- Completar a autenticação antes de usar com alunos reais: limite de tentativas de login,
+  troca e recuperação de senha, exclusão de conta, limpeza periódica das sessões expiradas
+  e proteção do `/metrics`, que segue aberto. A lista está em [`docs/lgpd.md`](docs/lgpd.md)
+- O aluno ainda não tem como listar as próprias aulas (`GET /minhas-aulas`): hoje ele só
+  conhece o `id` da aula pela resposta da reserva. Necessário para a interface web
+- Medir o p95 de novo: o número de 13/11 é de antes da autenticação, que acrescenta uma
+  consulta ao banco por requisição
 - Subir um Prometheus para medir o SLO de forma contínua
 - Atualizar Prisma para a versão 7 e Vitest para a 5: o `npm audit` aponta vulnerabilidades
   em dependências transitivas (`deepmerge-ts`, `tinypool`, `minimatch`) que só se corrigem

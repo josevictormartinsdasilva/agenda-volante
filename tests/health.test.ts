@@ -2,10 +2,10 @@ import Fastify from 'fastify';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { healthRoutes } from '../src/routes/health.js';
-import { criarAmbiente } from './helpers.js';
+import { criarAmbiente, criarApp } from './helpers.js';
 
 describe('GET /health (liveness)', () => {
-  const app = buildApp({ logLevel: 'silent' }, criarAmbiente().casos);
+  const { app } = criarApp();
   afterAll(() => app.close());
 
   it('responde 200 com status ok', async () => {
@@ -52,7 +52,7 @@ describe('GET /ready (readiness)', () => {
   });
 
   it('a aplicação montada sem verificação (memória) está sempre pronta', async () => {
-    const app = buildApp({ logLevel: 'silent' }, criarAmbiente().casos);
+    const { app } = criarApp();
 
     const resposta = await app.inject({ method: 'GET', url: '/ready' });
 
@@ -61,7 +61,8 @@ describe('GET /ready (readiness)', () => {
   });
 
   it('a aplicação usa a verificação que recebeu ao ser montada', async () => {
-    const app = buildApp({ logLevel: 'silent' }, criarAmbiente().casos, () =>
+    const { casos, autenticacao } = criarAmbiente();
+    const app = buildApp({ logLevel: 'silent' }, casos, autenticacao, () =>
       Promise.reject(new Error('banco fora')),
     );
 

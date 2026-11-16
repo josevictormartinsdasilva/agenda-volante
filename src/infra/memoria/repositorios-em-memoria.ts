@@ -1,4 +1,4 @@
-import { HorarioOcupado, SaldoInsuficiente } from '../../domain/erros.js';
+import { EmailJaCadastrado, HorarioOcupado, SaldoInsuficiente } from '../../domain/erros.js';
 import type {
   AlunoRepository,
   Armazenamento,
@@ -6,8 +6,25 @@ import type {
   DisponibilidadeRepository,
   PacoteRepository,
   Repositorios,
+  SessaoRepository,
+  UsuarioRepository,
 } from '../../domain/repositorios.js';
-import type { Aluno, Aula, Pacote } from '../../domain/tipos.js';
+import type { Aluno, Aula, Pacote, Papel, Sessao, Usuario } from '../../domain/tipos.js';
+
+/**
+ * Tabela em memória: um Map com "retrato", que copia o estado e devolve a função que o
+ * restaura (o "rollback" da transação). Os valores são imutáveis, então copiar o Map basta.
+ */
+class Tabela<V> {
+  linhas = new Map<string, V>();
+
+  retrato(): () => void {
+    const copia = new Map(this.linhas);
+    return () => {
+      this.linhas = copia;
+    };
+  }
+}
 
 /**
  * Implementações em memória das portas de persistência: os dados somem ao reiniciar.
@@ -17,44 +34,74 @@ import type { Aluno, Aula, Pacote } from '../../domain/tipos.js';
  * troca de requisição dentro de um trecho síncrono.
  */
 class AlunoEmMemoria implements AlunoRepository {
-  private readonly porId = new Map<string, Aluno>();
+  readonly tabela = new Tabela<Aluno>();
 
   async salvar(aluno: Aluno): Promise<void> {
-    this.porId.set(aluno.id, aluno);
+    this.tabela.linhas.set(aluno.id, aluno);
   }
 
   async buscarPorId(id: string): Promise<Aluno | undefined> {
-    return this.porId.get(id);
+    return this.tabela.linhas.get(id);
+  }
+
+  async listar(): Promise<Aluno[]> {
+    return [...this.tabela.linhas.values()].sort((a, b) => a.nome.localeCompare(b.nome));
+  }
+}
+
+class UsuarioEmMemoria implements UsuarioRepository {
+  /** Chave: e-mail (único, como o índice do Postgres). */
+  readonly tabela = new Tabela<Usuario>();
+
+  async criar(usuario: Usuario): Promise<void> {
+    if (this.tabela.linhas.has(usuario.email)) throw new EmailJaCadastrado();
+    this.tabela.linhas.set(usuario.email, usuario);
+  }
+
+  async buscarPorEmail(email: string): Promise<Usuario | undefined> {
+    return this.tabela.linhas.get(email);
+  }
+
+  async listarPorPapel(papel: Papel): Promise<Usuario[]> {
+    return [...this.tabela.linhas.values()].filter((u) => u.papel === papel);
+  }
+}
+
+class SessaoEmMemoria implements SessaoRepository {
+  readonly tabela = new Tabela<Sessao>();
+
+  async salvar(sessao: Sessao): Promise<void> {
+    this.tabela.linhas.set(sessao.tokenHash, sessao);
+  }
+
+  async buscar(tokenHash: string): Promise<Sessao | undefined> {
+    return this.tabela.linhas.get(tokenHash);
+  }
+
+  async remover(tokenHash: string): Promise<void> {
+    this.tabela.linhas.delete(tokenHash);
   }
 }
 
 class PacoteEmMemoria implements PacoteRepository {
-  private porAluno = new Map<string, Pacote>();
+  readonly tabela = new Tabela<Pacote>();
 
   async creditar(alunoId: string, quantidade: number): Promise<Pacote> {
-    const pacote = { alunoId, saldo: (this.porAluno.get(alunoId)?.saldo ?? 0) + quantidade };
-    this.porAluno.set(alunoId, pacote);
+    const pacote = { alunoId, saldo: (this.tabela.linhas.get(alunoId)?.saldo ?? 0) + quantidade };
+    this.tabela.linhas.set(alunoId, pacote);
     return pacote;
   }
 
   async debitar(alunoId: string): Promise<Pacote> {
-    const atual = this.porAluno.get(alunoId);
+    const atual = this.tabela.linhas.get(alunoId);
     if (!atual || atual.saldo < 1) throw new SaldoInsuficiente();
     const pacote = { alunoId, saldo: atual.saldo - 1 };
-    this.porAluno.set(alunoId, pacote);
+    this.tabela.linhas.set(alunoId, pacote);
     return pacote;
   }
 
   async buscarPorAluno(alunoId: string): Promise<Pacote | undefined> {
-    return this.porAluno.get(alunoId);
-  }
-
-  /** Copia o estado e devolve a função que o restaura (o "rollback" da transação). */
-  retrato(): () => void {
-    const copia = new Map(this.porAluno);
-    return () => {
-      this.porAluno = copia;
-    };
+    return this.tabela.linhas.get(alunoId);
   }
 }
 
@@ -74,11 +121,11 @@ class DisponibilidadeEmMemoria implements DisponibilidadeRepository {
 }
 
 class AulaEmMemoria implements AulaRepository {
-  private porId = new Map<string, Aula>();
+  readonly tabela = new Tabela<Aula>();
 
   async salvar(aula: Aula): Promise<void> {
     // R3 no armazenamento, como o índice único parcial do Postgres.
-    const conflito = [...this.porId.values()].some(
+    const conflito = [...this.tabela.linhas.values()].some(
       (a) =>
         a.id !== aula.id &&
         a.status === 'reservada' &&
@@ -86,55 +133,56 @@ class AulaEmMemoria implements AulaRepository {
         a.inicio.getTime() === aula.inicio.getTime(),
     );
     if (conflito) throw new HorarioOcupado();
-    this.porId.set(aula.id, aula);
+    this.tabela.linhas.set(aula.id, aula);
   }
 
   async cancelar(id: string): Promise<boolean> {
-    const aula = this.porId.get(id);
+    const aula = this.tabela.linhas.get(id);
     if (aula?.status !== 'reservada') return false;
-    this.porId.set(id, { ...aula, status: 'cancelada' });
+    this.tabela.linhas.set(id, { ...aula, status: 'cancelada' });
     return true;
   }
 
   async buscarPorId(id: string): Promise<Aula | undefined> {
-    return this.porId.get(id);
+    return this.tabela.linhas.get(id);
   }
 
   async listarEntre(de: Date, ate: Date): Promise<Aula[]> {
-    return [...this.porId.values()].filter(
+    return [...this.tabela.linhas.values()].filter(
       (a) => a.inicio.getTime() >= de.getTime() && a.inicio.getTime() < ate.getTime(),
     );
-  }
-
-  retrato(): () => void {
-    const copia = new Map(this.porId);
-    return () => {
-      this.porId = copia;
-    };
   }
 }
 
 export function criarRepositoriosEmMemoria(): Armazenamento {
+  const alunos = new AlunoEmMemoria();
+  const usuarios = new UsuarioEmMemoria();
+  const sessoes = new SessaoEmMemoria();
   const pacotes = new PacoteEmMemoria();
   const aulas = new AulaEmMemoria();
   const repos: Repositorios = {
-    alunos: new AlunoEmMemoria(),
+    alunos,
+    usuarios,
+    sessoes,
     pacotes,
     disponibilidade: new DisponibilidadeEmMemoria(),
     aulas,
   };
+  // O que uma transação que falha desfaz. A disponibilidade fica de fora: nenhuma
+  // transação a grava hoje.
+  const tabelas = [alunos.tabela, usuarios.tabela, sessoes.tabela, pacotes.tabela, aulas.tabela];
 
   // Uma transação por vez: cada uma espera a anterior terminar. Assim o retrato tirado no
   // início não apaga, ao ser restaurado, o que outra transação gravou no meio.
-  // Limites: só pacotes e aulas são desfeitos (é o que as transações gravam hoje), e uma
-  // gravação feita fora de transação enquanto outra está aberta se perde se ela falhar.
+  // Limite: uma gravação feita fora de transação enquanto outra está aberta se perde se
+  // ela falhar.
   let fila: Promise<unknown> = Promise.resolve();
 
   return {
     ...repos,
     emTransacao<T>(trabalho: (repos: Repositorios) => Promise<T>): Promise<T> {
       const execucao = fila.then(async () => {
-        const desfazer = [pacotes.retrato(), aulas.retrato()];
+        const desfazer = tabelas.map((tabela) => tabela.retrato());
         try {
           return await trabalho(repos);
         } catch (erro) {

@@ -60,6 +60,12 @@ Antes de dizer que uma tarefa terminou, rode lint, typecheck e test:coverage. Tu
 - Duas implementações dos repositórios (`src/infra/memoria/` e `src/infra/prisma/`), presas
   ao mesmo teste de contrato (`tests/infra/contrato-de-repositorios.ts`). Mudou a
   interface, mudam as duas e o contrato.
+- Autenticação (ADR 0003): papéis `admin` (contas), `instrutor` (agenda) e `aluno`. A rota
+  declara o papel exigido (`guarda('instrutor')`); a regra de posse ("o aluno só mexe na
+  própria aula") fica no caso de uso. Rota nova nasce protegida, e o contrato OpenAPI diz
+  se é pública (`security: []`).
+- Nenhuma credencial de conta em `.env`, Compose ou imagem: o administrador nasce de
+  `npm run admin:criar` (`src/criar-admin.ts`), rodado no servidor.
 - Concorrência: nunca "ler, calcular e gravar" um valor disputado. A condição vai no
   próprio comando de gravação (como `debitar` e `cancelar`) e gravações que precisam valer
   juntas vão em `emTransacao` (ADR 0002).

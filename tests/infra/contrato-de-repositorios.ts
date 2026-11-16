@@ -1,11 +1,30 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { HorarioOcupado, SaldoInsuficiente } from '../../src/domain/erros.js';
+import {
+  EmailJaCadastrado,
+  HorarioOcupado,
+  SaldoInsuficiente,
+} from '../../src/domain/erros.js';
 import type { Armazenamento } from '../../src/domain/repositorios.js';
-import type { Aula } from '../../src/domain/tipos.js';
+import type { Aula, Usuario } from '../../src/domain/tipos.js';
 
 const H10 = new Date('2026-11-20T13:00:00.000Z');
 const H11 = new Date('2026-11-20T14:00:00.000Z');
 const H12 = new Date('2026-11-20T15:00:00.000Z');
+
+const CONTA_DA_ANA: Usuario = {
+  id: 'u-ana',
+  email: 'ana@exemplo.com',
+  senhaHash: 'hash-qualquer',
+  papel: 'aluno',
+  alunoId: 'ana',
+};
+const CONTA_DO_INSTRUTOR: Usuario = {
+  id: 'u-instrutor',
+  email: 'instrutor@exemplo.com',
+  senhaHash: 'outro-hash',
+  papel: 'instrutor',
+  alunoId: null,
+};
 
 function aula(id: string, inicio: Date, status: Aula['status'] = 'reservada'): Aula {
   return { id, alunoId: 'ana', inicio, fim: new Date(inicio.getTime() + 50 * 60_000), status };
@@ -32,6 +51,73 @@ export function contratoDeRepositorios(
     it('aluno: guarda e busca por id; id desconhecido devolve undefined', async () => {
       expect(await repos.alunos.buscarPorId('ana')).toEqual({ id: 'ana', nome: 'Ana' });
       expect(await repos.alunos.buscarPorId('fantasma')).toBeUndefined();
+    });
+
+    it('aluno: lista todos em ordem de nome', async () => {
+      await repos.alunos.salvar({ id: 'zeca', nome: 'Zeca' });
+      await repos.alunos.salvar({ id: 'bia', nome: 'Bia' });
+
+      expect((await repos.alunos.listar()).map((a) => a.nome)).toEqual(['Ana', 'Bia', 'Zeca']);
+    });
+
+    it('usuário: guarda, busca por e-mail e lista por papel', async () => {
+      await repos.usuarios.criar(CONTA_DA_ANA);
+      await repos.usuarios.criar(CONTA_DO_INSTRUTOR);
+
+      expect(await repos.usuarios.buscarPorEmail('ana@exemplo.com')).toEqual(CONTA_DA_ANA);
+      expect(await repos.usuarios.buscarPorEmail('ninguem@exemplo.com')).toBeUndefined();
+      expect(await repos.usuarios.listarPorPapel('aluno')).toEqual([CONTA_DA_ANA]);
+      expect(await repos.usuarios.listarPorPapel('instrutor')).toEqual([CONTA_DO_INSTRUTOR]);
+    });
+
+    it('usuário: recusa um segundo cadastro com o mesmo e-mail', async () => {
+      await repos.usuarios.criar(CONTA_DO_INSTRUTOR);
+
+      await expect(
+        repos.usuarios.criar({ ...CONTA_DO_INSTRUTOR, id: 'u-outro' }),
+      ).rejects.toBeInstanceOf(EmailJaCadastrado);
+    });
+
+    it('usuário: de dois cadastros simultâneos com o mesmo e-mail, só um passa', async () => {
+      const resultados = await Promise.allSettled([
+        repos.usuarios.criar(CONTA_DO_INSTRUTOR),
+        repos.usuarios.criar({ ...CONTA_DO_INSTRUTOR, id: 'u-outro' }),
+      ]);
+
+      expect(resultados.filter((r) => r.status === 'rejected')).toHaveLength(1);
+      expect(await repos.usuarios.listarPorPapel('instrutor')).toHaveLength(1);
+    });
+
+    it('transação: conta com e-mail repetido desfaz o aluno gravado junto', async () => {
+      await repos.usuarios.criar(CONTA_DA_ANA);
+
+      await expect(
+        repos.emTransacao(async (tx) => {
+          await tx.alunos.salvar({ id: 'clone', nome: 'Clone' });
+          await tx.usuarios.criar({ ...CONTA_DA_ANA, id: 'u-clone', alunoId: 'clone' });
+        }),
+      ).rejects.toBeInstanceOf(EmailJaCadastrado);
+
+      expect(await repos.alunos.buscarPorId('clone')).toBeUndefined();
+    });
+
+    it('sessão: guarda, busca pelo resumo do token e remove (remover de novo não é erro)', async () => {
+      await repos.usuarios.criar(CONTA_DA_ANA);
+      const sessao = {
+        tokenHash: 'resumo-1',
+        usuarioId: 'u-ana',
+        papel: 'aluno' as const,
+        alunoId: 'ana',
+        expiraEm: new Date('2026-11-27T12:00:00.000Z'),
+      };
+
+      await repos.sessoes.salvar(sessao);
+      expect(await repos.sessoes.buscar('resumo-1')).toEqual(sessao);
+      expect(await repos.sessoes.buscar('outro-resumo')).toBeUndefined();
+
+      await repos.sessoes.remover('resumo-1');
+      await expect(repos.sessoes.remover('resumo-1')).resolves.toBeUndefined();
+      expect(await repos.sessoes.buscar('resumo-1')).toBeUndefined();
     });
 
     it('pacote: creditar cria o pacote e depois soma ao saldo', async () => {
