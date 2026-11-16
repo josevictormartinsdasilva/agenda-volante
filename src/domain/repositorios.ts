@@ -11,8 +11,19 @@ export interface AlunoRepository {
   buscarPorId(id: string): Promise<Aluno | undefined>;
 }
 
+/**
+ * O saldo só muda por operações atômicas (`creditar` e `debitar`). Não existe "gravar
+ * o saldo que eu calculei": quem lê, calcula e grava perde a atualização de quem gravou
+ * no meio do caminho (ADR 0002).
+ */
 export interface PacoteRepository {
-  salvar(pacote: Pacote): Promise<void>;
+  /** Soma `quantidade` ao saldo, criando o pacote se o aluno ainda não tem. */
+  creditar(alunoId: string, quantidade: number): Promise<Pacote>;
+  /**
+   * Consome 1 crédito. Lança `SaldoInsuficiente` se não há pacote ou o saldo é zero (R5):
+   * a checagem e o débito são uma operação só, então o saldo nunca fica negativo.
+   */
+  debitar(alunoId: string): Promise<Pacote>;
   buscarPorAluno(alunoId: string): Promise<Pacote | undefined>;
 }
 
@@ -28,6 +39,12 @@ export interface AulaRepository {
    * começa no mesmo instante (R3): a restrição vale no armazenamento, não só na checagem.
    */
   salvar(aula: Aula): Promise<void>;
+  /**
+   * Passa a aula de reservada para cancelada e devolve `true`. Devolve `false`, sem
+   * alterar nada, se não há aula reservada com esse `id` (já cancelada ou inexistente):
+   * de dois cancelamentos simultâneos, só um recebe `true`.
+   */
+  cancelar(id: string): Promise<boolean>;
   buscarPorId(id: string): Promise<Aula | undefined>;
   /** Todas as aulas (reservadas e canceladas) que começam no intervalo. */
   listarEntre(de: Date, ate: Date): Promise<Aula[]>;
@@ -38,4 +55,12 @@ export interface Repositorios {
   pacotes: PacoteRepository;
   disponibilidade: DisponibilidadeRepository;
   aulas: AulaRepository;
+}
+
+/**
+ * Repositórios mais a transação (unidade de trabalho). Tudo o que `trabalho` gravar pelos
+ * repositórios que recebe vale junto ou não vale: se ele lançar, nada fica gravado.
+ */
+export interface Armazenamento extends Repositorios {
+  emTransacao<T>(trabalho: (repos: Repositorios) => Promise<T>): Promise<T>;
 }

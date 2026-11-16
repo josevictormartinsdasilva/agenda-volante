@@ -185,6 +185,55 @@ describe('cancelarAula (R6)', () => {
   });
 });
 
+describe('saldo sob concorrência (R5 e R6)', () => {
+  it('duas reservas simultâneas do mesmo aluno não gastam mais créditos do que ele tem', async () => {
+    const ambiente = criarAmbiente();
+    const aluno = await alunoComPacote(ambiente, 1);
+    await ambiente.casos.publicarDisponibilidade([H10, H11]);
+
+    const resultados = await Promise.allSettled([
+      ambiente.casos.reservarAula(aluno.id, H10),
+      ambiente.casos.reservarAula(aluno.id, H11),
+    ]);
+
+    const recusadas = resultados.filter((r) => r.status === 'rejected');
+    expect(recusadas).toHaveLength(1);
+    expect(recusadas[0]?.reason).toBeInstanceOf(SaldoInsuficiente);
+    // A reserva recusada não deixa aula gravada: 1 crédito, 1 aula.
+    expect(await ambiente.casos.consultarAgenda('2026-11-20')).toHaveLength(1);
+    expect((await ambiente.repositorios.pacotes.buscarPorAluno(aluno.id))?.saldo).toBe(0);
+  });
+
+  it('dois cancelamentos simultâneos da mesma aula devolvem o crédito uma vez só', async () => {
+    const ambiente = criarAmbiente();
+    const aluno = await alunoComPacote(ambiente, 1);
+    await ambiente.casos.publicarDisponibilidade([H10]);
+    const { aula } = await ambiente.casos.reservarAula(aluno.id, H10);
+
+    const resultados = await Promise.allSettled([
+      ambiente.casos.cancelarAula(aula.id),
+      ambiente.casos.cancelarAula(aula.id),
+    ]);
+
+    const recusados = resultados.filter((r) => r.status === 'rejected');
+    expect(recusados).toHaveLength(1);
+    expect(recusados[0]?.reason).toBeInstanceOf(AulaJaCancelada);
+    expect((await ambiente.repositorios.pacotes.buscarPorAluno(aluno.id))?.saldo).toBe(1);
+  });
+
+  it('dois pacotes registrados ao mesmo tempo somam os dois', async () => {
+    const ambiente = criarAmbiente();
+    const aluno = await ambiente.casos.cadastrarAluno({ nome: 'Ana' });
+
+    await Promise.all([
+      ambiente.casos.registrarPacote(aluno.id, 4),
+      ambiente.casos.registrarPacote(aluno.id, 6),
+    ]);
+
+    expect((await ambiente.repositorios.pacotes.buscarPorAluno(aluno.id))?.saldo).toBe(10);
+  });
+});
+
 describe('consultarAgenda', () => {
   it('lista as aulas reservadas do dia em ordem e ignora canceladas e de outros dias', async () => {
     const ambiente = criarAmbiente();
