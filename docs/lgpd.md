@@ -21,6 +21,7 @@ contas de acesso (etapa 4 da fase 2).
 | E-mail | `Usuario.email` | Identificar a conta no login (aluno, instrutor e administrador) |
 | Hash da senha | `Usuario.senhaHash` | Conferir a senha no login. A senha em si nunca é guardada (scrypt com sal) |
 | Sessões | `Sessao` | Manter o login. Guarda o resumo (SHA-256) do token, o papel e a validade |
+| Código de redefinição | `CodigoDeRedefinicao` | Redefinir a senha esquecida. Guarda o resumo do código e a validade (1 hora); apagado no uso |
 | Aulas e saldo | `Aula`, `Pacote` | O serviço em si: agenda e créditos |
 
 **Não é guardado:** CPF, telefone, endereço, data de nascimento, dados de pagamento, dados
@@ -40,16 +41,16 @@ ele precisa de base própria antes de ser implementado.
 | Dado | Prazo | Situação |
 |---|---|---|
 | Sessão | Expira em `SESSAO_DURACAO_HORAS` (padrão 7 dias) ou no logout | Implementado. A sessão vencida é recusada e apagada no uso, e uma tarefa apaga as demais a cada hora |
-| Conta, nome e e-mail | Enquanto o aluno for aluno do instrutor | **Falta** o fluxo de exclusão: hoje só é possível apagar direto no banco |
+| Conta, nome e e-mail | Enquanto o aluno quiser | Implementado: o aluno exclui a conta (`DELETE /conta`); e-mail, senha e sessões são apagados e o nome é substituído por "Aluno removido" |
 | Aulas e saldo | A definir com o instrutor (histórico das aulas dadas) | **Falta** definir |
 
 ## Direitos do titular
 
 | Direito (art. 18) | Situação |
 |---|---|
-| Acesso aos dados | Parcial: o aluno vê o que informou no cadastro; não há tela ou endpoint de "meus dados" |
-| Correção | **Falta:** não há como trocar nome, e-mail ou senha pela API |
-| Eliminação | **Falta:** não há exclusão de conta pela API |
+| Acesso aos dados | Parcial: o aluno vê as próprias aulas e o saldo (`GET /minhas-aulas`); não há endpoint com nome e e-mail |
+| Correção | Parcial: a senha muda (`POST /conta/senha`); **falta** corrigir nome e e-mail |
+| Eliminação | Implementado: `DELETE /conta` apaga a conta e anonimiza o aluno. As aulas passadas ficam, sem o nome, como histórico do instrutor (**a validar**: se isso basta como anonimização) |
 | Portabilidade | **Falta** |
 
 Enquanto esses fluxos não existem, o pedido é atendido à mão pelo instrutor ou por mim,
@@ -70,6 +71,5 @@ direto no banco. Isso serve para um piloto pequeno, não para vender o sistema.
 
 1. Validar a base legal e este documento.
 2. Escrever o aviso de privacidade que o aluno lê ao criar a conta.
-3. Implementar exclusão de conta e troca de senha.
 4. Servir só por HTTPS (e, atrás de proxy, `TRUST_PROXY=true`).
 5. Definir com o instrutor o prazo de guarda do histórico de aulas.

@@ -101,7 +101,21 @@ curl -s -X DELETE http://localhost:3000/sessoes/atual -H "$ALUNO"
 ```
 
 Sem token a resposta é `401`; o aluno em rota do instrutor recebe `403`, e só mexe nas
-próprias aulas. Reservar o mesmo horário de novo responde `409`; um horário não publicado, fora da hora
+próprias aulas. O aluno vê as próprias aulas e o saldo em `GET /minhas-aulas`.
+
+Se o aluno esquecer a senha, o instrutor gera um código de uso único (vale 1 hora) e o
+repassa, por WhatsApp por exemplo. O instrutor não vê nem define a senha:
+
+```bash
+# Instrutor gera o código; a resposta traz algo como {"codigo":"K7QM-3XRA",...}
+curl -s -X POST http://localhost:3000/alunos/<ALUNO_ID>/codigo-de-redefinicao -H "$INSTRUTOR"
+
+# Aluno, sem estar logado, cria a senha nova; todas as sessões dele caem
+curl -s -X POST http://localhost:3000/senha/redefinicao -H 'content-type: application/json' \
+  -d '{"email":"ana@exemplo.com","codigo":"K7QM-3XRA","novaSenha":"outra-senha-longa"}'
+```
+
+Reservar o mesmo horário de novo responde `409`; um horário não publicado, fora da hora
 cheia ou sem saldo responde `422`, sempre com `{"erro": "..."}` em português.
 
 ## Observabilidade
@@ -174,6 +188,9 @@ Fluxo principal (contrato completo em [`docs/openapi.yaml`](docs/openapi.yaml)):
 |---|---|
 | Administrador cadastra instrutor (o administrador nasce de `npm run admin:criar`) | `POST /instrutores` |
 | Aluno cria a conta; todos fazem login e logout | `POST /alunos`, `POST /sessoes`, `DELETE /sessoes/atual` |
+| Qualquer conta troca a própria senha; o aluno exclui a própria conta | `POST /conta/senha`, `DELETE /conta` |
+| Instrutor gera código para o aluno que esqueceu a senha; o aluno redefine | `POST /alunos/{id}/codigo-de-redefinicao`, `POST /senha/redefinicao` |
+| Aluno vê as próprias aulas e o saldo | `GET /minhas-aulas` |
 | Instrutor lista os alunos e registra o pacote de aulas | `GET /alunos`, `POST /alunos/{id}/pacote` |
 | Instrutor publica a disponibilidade | `POST /disponibilidades` |
 | Aluno consulta os horários livres | `GET /horarios-livres` |
@@ -192,6 +209,9 @@ Fluxo principal (contrato completo em [`docs/openapi.yaml`](docs/openapi.yaml)):
 - **Strategy** na política de cancelamento (R6), para trocar a regra sem mexer na reserva.
 - **Repository** com Prisma como Database Pattern: ADR em
   [`docs/adr/0001-repository-como-database-pattern-com-prisma.md`](docs/adr/0001-repository-como-database-pattern-com-prisma.md).
+- **Conta do aluno:** troca de senha, exclusão com anonimização e redefinição por código
+  que o instrutor gera, com o gancho pronto para a recuperação por e-mail: ADR em
+  [`docs/adr/0005-redefinicao-de-senha-por-codigo-do-instrutor.md`](docs/adr/0005-redefinicao-de-senha-por-codigo-do-instrutor.md).
 - **Login e métricas:** até 5 tentativas de login por e-mail e 20 por IP a cada 15 minutos
   (`429` depois disso), sessões vencidas apagadas a cada hora e `/metrics` numa porta
   interna: ADR em
@@ -215,12 +235,13 @@ docs/         regras de negócio, ADR, OpenAPI, SLO, desempenho, LGPD, uso de IA
 
 ## Próximos passos
 
-- Completar a autenticação antes de usar com alunos reais: troca e recuperação de senha e
-  exclusão de conta. A lista está em [`docs/lgpd.md`](docs/lgpd.md)
+- Recuperação de senha por e-mail, sem depender do instrutor: implementar `EnvioDeCodigo`
+  com um provedor, confirmar o e-mail no cadastro, limitar os pedidos e abrir
+  `POST /senha/esqueci`. O caso de uso já existe (ADR 0005); depende de um domínio
+- Corrigir nome e e-mail pela API (hoje só a senha muda) e exportar os próprios dados,
+  para completar os direitos do titular em [`docs/lgpd.md`](docs/lgpd.md)
 - Limite de login compartilhado (Postgres ou Redis) quando houver mais de uma instância da
   API: hoje o contador é em memória (ADR 0004)
-- O aluno ainda não tem como listar as próprias aulas (`GET /minhas-aulas`): hoje ele só
-  conhece o `id` da aula pela resposta da reserva. Necessário para a interface web
 - Medir o p95 de novo: o número de 13/11 é de antes da autenticação, que acrescenta uma
   consulta ao banco por requisição
 - Subir um Prometheus para medir o SLO de forma contínua

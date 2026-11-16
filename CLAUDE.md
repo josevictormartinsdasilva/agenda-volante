@@ -66,6 +66,9 @@ Antes de dizer que uma tarefa terminou, rode lint, typecheck e test:coverage. Tu
   se é pública (`security: []`).
 - Nenhuma credencial de conta em `.env`, Compose ou imagem: o administrador nasce de
   `npm run admin:criar` (`src/criar-admin.ts`), rodado no servidor.
+- Todo dado secreto de uso único (token de sessão, código de redefinição) vai para o banco
+  como resumo (SHA-256), nunca em claro. Consumir é um comando condicionado, como em
+  `codigos.consumir` (ADR 0005).
 - `/metrics` fica numa segunda aplicação Fastify, na porta interna `METRICS_PORT`, que o
   Compose não publica (ADR 0004). Não o devolva para a porta pública.
 - Concorrência: nunca "ler, calcular e gravar" um valor disputado. A condição vai no
