@@ -39,7 +39,7 @@ ele precisa de base própria antes de ser implementado.
 
 | Dado | Prazo | Situação |
 |---|---|---|
-| Sessão | Expira em `SESSAO_DURACAO_HORAS` (padrão 7 dias) ou no logout | Implementado. A sessão expirada é apagada quando alguém tenta usá-la; **falta** uma limpeza periódica das que ninguém usou de novo |
+| Sessão | Expira em `SESSAO_DURACAO_HORAS` (padrão 7 dias) ou no logout | Implementado. A sessão vencida é recusada e apagada no uso, e uma tarefa apaga as demais a cada hora |
 | Conta, nome e e-mail | Enquanto o aluno for aluno do instrutor | **Falta** o fluxo de exclusão: hoje só é possível apagar direto no banco |
 | Aulas e saldo | A definir com o instrutor (histórico das aulas dadas) | **Falta** definir |
 
@@ -61,13 +61,15 @@ direto no banco. Isso serve para um piloto pequeno, não para vender o sistema.
 - Token de sessão aleatório de 256 bits; o banco guarda só o resumo dele.
 - Login responde igual para e-mail desconhecido e senha errada.
 - Cada aluno só reserva e cancela as próprias aulas; só o instrutor lista alunos.
-- **Falta:** limite de tentativas de login, HTTPS (depende do deploy), proteção do
-  `/metrics`, troca e recuperação de senha, e um plano de resposta a incidente.
+- Limite de tentativas de login: 5 por e-mail e 20 por IP a cada 15 minutos (ADR 0004).
+- `/metrics` fora da porta pública: só a rede interna alcança.
+- **Falta:** HTTPS (depende do deploy), troca e recuperação de senha, e um plano de
+  resposta a incidente.
 
 ## Antes de usar com alunos reais
 
 1. Validar a base legal e este documento.
 2. Escrever o aviso de privacidade que o aluno lê ao criar a conta.
 3. Implementar exclusão de conta e troca de senha.
-4. Limitar tentativas de login e servir só por HTTPS.
+4. Servir só por HTTPS (e, atrás de proxy, `TRUST_PROXY=true`).
 5. Definir com o instrutor o prazo de guarda do histórico de aulas.

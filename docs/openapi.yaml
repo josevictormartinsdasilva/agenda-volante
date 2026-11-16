@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agenda Volante
-  version: 0.3.0
+  version: 0.4.0
   description: |
     API de agendamento de aulas de um instrutor de trânsito autônomo. O aluno consulta
     os horários livres e reserva sem interromper o instrutor.
@@ -389,6 +389,10 @@ paths:
         Troca e-mail e senha por um token de sessão, válido por `SESSAO_DURACAO_HORAS`
         (padrão 168 h). O token só aparece nesta resposta: o servidor guarda apenas um
         resumo dele. E-mail desconhecido e senha errada dão a mesma resposta.
+
+        Limite de tentativas: 5 por e-mail e 20 por IP a cada 15 minutos (configuráveis).
+        Passou disso, a resposta é `429` até a janela acabar, mesmo com a senha certa.
+        Login certo zera os erros do e-mail.
       security: []
       requestBody:
         required: true
@@ -421,6 +425,20 @@ paths:
                 $ref: '#/components/schemas/Erro'
               example:
                 erro: E-mail ou senha inválidos
+        '429':
+          description: Tentativas demais para este e-mail ou deste IP
+          headers:
+            Retry-After:
+              description: Segundos até poder tentar de novo
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                erro: Muitas tentativas de login. Tente de novo em 15 minutos
 
   /sessoes/atual:
     delete:

@@ -13,6 +13,9 @@ services:
       CANCELAMENTO_ANTECEDENCIA_HORAS: ${CANCELAMENTO_ANTECEDENCIA_HORAS:-48}
       DURACAO_AULA_MINUTOS: ${DURACAO_AULA_MINUTOS:-50}
       SESSAO_DURACAO_HORAS: ${SESSAO_DURACAO_HORAS:-168}
+      # /metrics escuta nesta porta, que de propósito NÃO está em "ports": só quem está na
+      # rede do Compose (um Prometheus, por exemplo) alcança. Ver ADR 0004.
+      METRICS_PORT: 9100
     depends_on:
       db:
         condition: service_healthy

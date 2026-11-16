@@ -111,12 +111,14 @@ cheia ou sem saldo responde `422`, sempre com `{"erro": "..."}` em português.
   diz se dá para atender, consultando o banco, e responde `503` se ele não responder em
   2 s. O Compose usa o `/ready` como `healthcheck` da API.
 - **Métrica:** `GET /metrics` expõe `http_request_duration_seconds` (método, rota, status)
-  no formato do Prometheus.
+  no formato do Prometheus, numa **porta interna** (9100) que o Compose não publica: a
+  porta 3000 da API responde `404` para `/metrics`.
 - **SLO:** disponibilidade de 99% e p95 abaixo de 300 ms no fluxo de consulta e reserva.
   Detalhes e como medir em [`docs/slo.md`](docs/slo.md).
 
 ```bash
-curl http://localhost:3000/metrics
+# De dentro do contêiner, que é onde a porta de métricas existe
+docker compose exec api wget -qO- http://127.0.0.1:9100/metrics
 ```
 
 ## Como testar
@@ -190,6 +192,12 @@ Fluxo principal (contrato completo em [`docs/openapi.yaml`](docs/openapi.yaml)):
 - **Strategy** na política de cancelamento (R6), para trocar a regra sem mexer na reserva.
 - **Repository** com Prisma como Database Pattern: ADR em
   [`docs/adr/0001-repository-como-database-pattern-com-prisma.md`](docs/adr/0001-repository-como-database-pattern-com-prisma.md).
+- **Login e métricas:** até 5 tentativas de login por e-mail e 20 por IP a cada 15 minutos
+  (`429` depois disso), sessões vencidas apagadas a cada hora e `/metrics` numa porta
+  interna: ADR em
+  [`docs/adr/0004-limite-de-login-e-metricas-em-porta-interna.md`](docs/adr/0004-limite-de-login-e-metricas-em-porta-interna.md).
+  Atrás de um proxy, defina `TRUST_PROXY=true`, senão todos os clientes dividem o limite
+  por IP.
 - **Saldo sob concorrência:** o crédito só muda por operações atômicas (`creditar`,
   `debitar`), e aula e pacote são gravados na mesma transação: ADR em
   [`docs/adr/0002-saldo-atomico-e-transacao.md`](docs/adr/0002-saldo-atomico-e-transacao.md).
@@ -207,9 +215,10 @@ docs/         regras de negócio, ADR, OpenAPI, SLO, desempenho, LGPD, uso de IA
 
 ## Próximos passos
 
-- Completar a autenticação antes de usar com alunos reais: limite de tentativas de login,
-  troca e recuperação de senha, exclusão de conta, limpeza periódica das sessões expiradas
-  e proteção do `/metrics`, que segue aberto. A lista está em [`docs/lgpd.md`](docs/lgpd.md)
+- Completar a autenticação antes de usar com alunos reais: troca e recuperação de senha e
+  exclusão de conta. A lista está em [`docs/lgpd.md`](docs/lgpd.md)
+- Limite de login compartilhado (Postgres ou Redis) quando houver mais de uma instância da
+  API: hoje o contador é em memória (ADR 0004)
 - O aluno ainda não tem como listar as próprias aulas (`GET /minhas-aulas`): hoje ele só
   conhece o `id` da aula pela resposta da reserva. Necessário para a interface web
 - Medir o p95 de novo: o número de 13/11 é de antes da autenticação, que acrescenta uma

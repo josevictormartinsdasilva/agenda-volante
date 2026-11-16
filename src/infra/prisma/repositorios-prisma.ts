@@ -87,6 +87,12 @@ class SessaoPrisma implements SessaoRepository {
     // `deleteMany` não lança quando a sessão já não existe (logout repetido).
     await this.db.sessao.deleteMany({ where: { tokenHash } });
   }
+
+  async removerExpiradas(ate: Date): Promise<number> {
+    // Usa o índice em `expiraEm`: um DELETE só, sem trazer as linhas para a aplicação.
+    const { count } = await this.db.sessao.deleteMany({ where: { expiraEm: { lte: ate } } });
+    return count;
+  }
 }
 
 class PacotePrisma implements PacoteRepository {

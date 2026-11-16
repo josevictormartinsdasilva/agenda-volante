@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CredenciaisInvalidas,
   EmailJaCadastrado,
+  MuitasTentativas,
   NaoAutenticado,
 } from '../../src/domain/erros.js';
 import { criarAmbiente } from '../helpers.js';
@@ -117,6 +118,110 @@ describe('entrar', () => {
 
     await expect(senhaErrada).rejects.toBeInstanceOf(CredenciaisInvalidas);
     await expect(emailDesconhecido).rejects.toBeInstanceOf(CredenciaisInvalidas);
+  });
+});
+
+describe('limite de tentativas de login', () => {
+  // No ambiente de teste: 5 tentativas por e-mail e 20 por origem, em 15 minutos.
+  const errar = (ambiente: ReturnType<typeof criarAmbiente>, email: string, origem?: string) =>
+    ambiente.autenticacao.entrar({ email, senha: 'chute', origem }).catch((erro: unknown) => erro);
+
+  it('depois de 5 erros no mesmo e-mail, recusa até a senha certa, dizendo quanto esperar', async () => {
+    const ambiente = criarAmbiente();
+    await ambiente.autenticacao.cadastrarAluno(ANA);
+    for (let i = 0; i < 5; i++) {
+      expect(await errar(ambiente, ANA.email)).toBeInstanceOf(CredenciaisInvalidas);
+    }
+
+    const bloqueado = await ambiente.autenticacao.entrar(ANA).catch((erro: unknown) => erro);
+
+    expect(bloqueado).toBeInstanceOf(MuitasTentativas);
+    expect((bloqueado as MuitasTentativas).segundos).toBe(15 * 60);
+  });
+
+  it('o bloqueio é por e-mail sem diferenciar a caixa, e acaba depois da janela', async () => {
+    const ambiente = criarAmbiente(new Date('2026-11-10T12:00:00.000Z'));
+    await ambiente.autenticacao.cadastrarAluno(ANA);
+    for (let i = 0; i < 5; i++) await errar(ambiente, i % 2 ? 'ANA@exemplo.com' : ANA.email);
+
+    expect(await errar(ambiente, ANA.email)).toBeInstanceOf(MuitasTentativas);
+
+    ambiente.relogio.agora = new Date('2026-11-10T12:15:00.000Z');
+    await expect(ambiente.autenticacao.entrar(ANA)).resolves.toMatchObject({ papel: 'aluno' });
+  });
+
+  it('e-mail sem conta também é limitado, para não revelar quais e-mails existem', async () => {
+    const ambiente = criarAmbiente();
+    for (let i = 0; i < 5; i++) await errar(ambiente, 'ninguem@exemplo.com');
+
+    expect(await errar(ambiente, 'ninguem@exemplo.com')).toBeInstanceOf(MuitasTentativas);
+  });
+
+  it('login certo zera os erros do e-mail', async () => {
+    const ambiente = criarAmbiente();
+    await ambiente.autenticacao.cadastrarAluno(ANA);
+    for (let i = 0; i < 4; i++) await errar(ambiente, ANA.email);
+
+    await ambiente.autenticacao.entrar(ANA);
+    for (let i = 0; i < 4; i++) await errar(ambiente, ANA.email);
+
+    await expect(ambiente.autenticacao.entrar(ANA)).resolves.toMatchObject({ papel: 'aluno' });
+  });
+
+  it('a mesma origem errando em vários e-mails é bloqueada depois de 20 tentativas', async () => {
+    const ambiente = criarAmbiente();
+    for (let i = 0; i < 20; i++) await errar(ambiente, `alvo${i}@exemplo.com`, '203.0.113.7');
+
+    expect(await errar(ambiente, 'outro@exemplo.com', '203.0.113.7')).toBeInstanceOf(MuitasTentativas);
+    expect(await errar(ambiente, 'outro@exemplo.com', '198.51.100.1')).toBeInstanceOf(
+      CredenciaisInvalidas,
+    );
+  });
+
+  it('logins certos não gastam o limite da origem (vários alunos na mesma rede)', async () => {
+    const ambiente = criarAmbiente();
+    await ambiente.autenticacao.cadastrarAluno(ANA);
+
+    for (let i = 0; i < 25; i++) {
+      await ambiente.autenticacao.entrar({ ...ANA, origem: '203.0.113.7' });
+    }
+
+    await expect(
+      ambiente.autenticacao.entrar({ ...ANA, origem: '203.0.113.7' }),
+    ).resolves.toMatchObject({ papel: 'aluno' });
+  });
+
+  it('tentativas simultâneas contam todas: não passam juntas antes do primeiro erro', async () => {
+    const ambiente = criarAmbiente();
+    await ambiente.autenticacao.cadastrarAluno(ANA);
+
+    const resultados = await Promise.all(
+      Array.from({ length: 12 }, () => errar(ambiente, ANA.email)),
+    );
+
+    expect(resultados.filter((r) => r instanceof CredenciaisInvalidas)).toHaveLength(5);
+    expect(resultados.filter((r) => r instanceof MuitasTentativas)).toHaveLength(7);
+  });
+});
+
+describe('limparSessoesExpiradas', () => {
+  it('apaga só as sessões vencidas e diz quantas foram', async () => {
+    const ambiente = criarAmbiente(new Date('2026-11-10T12:00:00.000Z'));
+    await ambiente.autenticacao.cadastrarAluno(ANA);
+    const antiga = await ambiente.autenticacao.entrar(ANA);
+    ambiente.relogio.agora = new Date('2026-11-10T20:00:00.000Z');
+    const nova = await ambiente.autenticacao.entrar(ANA);
+
+    ambiente.relogio.agora = new Date('2026-11-11T12:00:00.000Z'); // a antiga venceu agora
+    const removidas = await ambiente.autenticacao.limparSessoesExpiradas();
+
+    expect(removidas).toBe(1);
+    await expect(ambiente.autenticacao.identificar(nova.token)).resolves.toMatchObject({
+      papel: 'aluno',
+    });
+    await expect(ambiente.autenticacao.identificar(antiga.token)).rejects.toBeInstanceOf(
+      NaoAutenticado,
+    );
   });
 });
 

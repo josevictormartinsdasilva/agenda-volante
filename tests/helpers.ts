@@ -1,6 +1,7 @@
 import { buildApp } from '../src/app.js';
 import { criarAutenticacao } from '../src/application/autenticacao.js';
 import { criarCasosDeUso } from '../src/application/casos-de-uso.js';
+import { criarLimitesDeLogin } from '../src/application/limite-de-tentativas.js';
 import { CancelamentoComAntecedencia } from '../src/domain/politica-cancelamento.js';
 import type { Aluno } from '../src/domain/tipos.js';
 import { criarRepositoriosEmMemoria } from '../src/infra/memoria/repositorios-em-memoria.js';
@@ -34,6 +35,10 @@ export function criarAmbiente(agoraInicial = new Date('2026-11-10T12:00:00.000Z'
     senhas: senhasDeTeste,
     tokens: { gerar: gerarToken, resumir: resumirToken },
     sessaoDuracaoHoras: 24,
+    limites: criarLimitesDeLogin(
+      { maxTentativasPorEmail: 5, maxTentativasPorOrigem: 20, janelaMinutos: 15 },
+      agora,
+    ),
     agora,
     gerarId,
   });

@@ -78,6 +78,14 @@ describe('adaptador Prisma', () => {
     expect(db.sessao.deleteMany).toHaveBeenCalledWith({ where: { tokenHash: 'resumo' } });
   });
 
+  it('sessão: remove as expiradas com um deleteMany por data e devolve a contagem', async () => {
+    const { db, repos } = criarDbFalso();
+    db.sessao.deleteMany.mockResolvedValue({ count: 3 });
+
+    expect(await repos.sessoes.removerExpiradas(H10)).toBe(3);
+    expect(db.sessao.deleteMany).toHaveBeenCalledWith({ where: { expiraEm: { lte: H10 } } });
+  });
+
   it('repassa qualquer outro erro sem disfarçá-lo de horário ocupado', async () => {
     const { db, repos } = criarDbFalso();
     const falha = erroPrisma('P2025');

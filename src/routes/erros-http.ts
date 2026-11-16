@@ -12,6 +12,7 @@ import {
   HorarioIndisponivel,
   HorarioNoPassado,
   HorarioOcupado,
+  MuitasTentativas,
   NaoAutenticado,
   SaldoInsuficiente,
 } from '../domain/erros.js';
@@ -29,6 +30,7 @@ const STATUS_POR_ERRO: ReadonlyArray<readonly [ClasseDeErro, number]> = [
   [HorarioOcupado, 409],
   [AulaJaCancelada, 409],
   [EmailJaCadastrado, 409],
+  [MuitasTentativas, 429],
   [HorarioForaDaGrade, 422],
   [HorarioNoPassado, 422],
   [HorarioIndisponivel, 422],
@@ -37,7 +39,11 @@ const STATUS_POR_ERRO: ReadonlyArray<readonly [ClasseDeErro, number]> = [
 
 export function tratarErro(erro: FastifyError, requisicao: FastifyRequest, resposta: FastifyReply) {
   const par = STATUS_POR_ERRO.find(([classe]) => erro instanceof classe);
-  if (par) return resposta.status(par[1]).send({ erro: erro.message });
+  if (par) {
+    // Diz ao cliente quando pode tentar de novo (RFC 9110, seção 10.2.3).
+    if (erro instanceof MuitasTentativas) resposta.header('retry-after', String(erro.segundos));
+    return resposta.status(par[1]).send({ erro: erro.message });
+  }
 
   // Validação do schema (corpo, parâmetros, query) do próprio Fastify.
   if (erro.validation) return resposta.status(400).send({ erro: erro.message });

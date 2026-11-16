@@ -89,6 +89,16 @@ export class CredenciaisInvalidas extends ErroDeDominio {
   }
 }
 
+/** Tentativas de login demais em pouco tempo, para o e-mail ou para a origem (IP). */
+export class MuitasTentativas extends ErroDeDominio {
+  constructor(readonly segundos: number) {
+    const minutos = Math.ceil(segundos / 60);
+    super(
+      `Muitas tentativas de login. Tente de novo em ${minutos} ${minutos === 1 ? 'minuto' : 'minutos'}`,
+    );
+  }
+}
+
 /** Sem token, token desconhecido ou sessão expirada. */
 export class NaoAutenticado extends ErroDeDominio {
   constructor() {
