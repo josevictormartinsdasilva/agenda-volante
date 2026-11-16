@@ -75,6 +75,9 @@ cheia ou sem saldo responde `422`, sempre com `{"erro": "..."}` em português.
 ## Observabilidade
 
 - **Logs:** JSON estruturado (pino), um por requisição.
+- **Saúde:** `GET /health` diz se o processo está de pé (não consulta nada); `GET /ready`
+  diz se dá para atender, consultando o banco, e responde `503` se ele não responder em
+  2 s. O Compose usa o `/ready` como `healthcheck` da API.
 - **Métrica:** `GET /metrics` expõe `http_request_duration_seconds` (método, rota, status)
   no formato do Prometheus.
 - **SLO:** disponibilidade de 99% e p95 abaixo de 300 ms no fluxo de consulta e reserva.
@@ -100,6 +103,11 @@ npm run test:coverage  # testes + coverage mínimo (falha abaixo de 80% de linha
 
 Sem `TEST_DATABASE_URL`, o contrato dos repositórios roda só contra a implementação em
 memória. O CI sobe um Postgres descartável e roda contra os dois.
+
+O `docs/openapi.yaml` é escrito à mão, e o teste de aderência
+(`tests/integracao/contrato-openapi.test.ts`) impede que ele se afaste da API: compara a
+validação de entrada de cada rota com o schema do contrato e valida o corpo de cada
+resposta do fluxo contra o schema documentado para aquele status.
 
 ## Smoke test de desempenho
 
@@ -140,6 +148,9 @@ Fluxo principal (contrato completo em [`docs/openapi.yaml`](docs/openapi.yaml)):
 - **Strategy** na política de cancelamento (R6), para trocar a regra sem mexer na reserva.
 - **Repository** com Prisma como Database Pattern: ADR em
   [`docs/adr/0001-repository-como-database-pattern-com-prisma.md`](docs/adr/0001-repository-como-database-pattern-com-prisma.md).
+- **Saldo sob concorrência:** o crédito só muda por operações atômicas (`creditar`,
+  `debitar`), e aula e pacote são gravados na mesma transação: ADR em
+  [`docs/adr/0002-saldo-atomico-e-transacao.md`](docs/adr/0002-saldo-atomico-e-transacao.md).
 
 ## Estrutura
 
@@ -152,19 +163,11 @@ docs/         regras de negócio, ADR, OpenAPI, SLO, desempenho, uso de IA
 .github/      pipeline de CI
 ```
 
-## Próximos passos (fora do escopo desta entrega)
+## Próximos passos
 
 - Autenticação: hoje os endpoints do instrutor e o `/metrics` ficam abertos; em produção,
   proteger o instrutor e expor `/metrics` só em rede interna
 - Subir um Prometheus para medir o SLO de forma contínua
-- Gravar a aula e o pacote na mesma transação (`$transaction` do Prisma): hoje `salvar(aula)`
-  e `salvar(pacote)` são duas gravações separadas, e uma queda entre elas deixaria a aula
-  reservada sem o crédito debitado. A R3 não é afetada, porque quem a garante é o índice
-  único do banco
-- Validar os corpos das requisições e respostas contra os schemas do `docs/openapi.yaml`:
-  hoje o teste de aderência confere rotas e status, mas não o formato dos corpos, então o
-  contrato pode divergir da API sem o CI perceber. Usar os schemas do OpenAPI nas rotas do
-  Fastify (ou um validador de contrato nos testes) fecharia essa lacuna
 - Atualizar Prisma para a versão 7 e Vitest para a 5: o `npm audit` aponta vulnerabilidades
   em dependências transitivas (`deepmerge-ts`, `tinypool`, `minimatch`) que só se corrigem
   com essas versões maiores. Avaliadas como sem exposição na API (afetam o CLI do Prisma e
@@ -180,23 +183,13 @@ docs/         regras de negócio, ADR, OpenAPI, SLO, desempenho, uso de IA
 
 Levantados na revisão final do código, em ordem aproximada de prioridade:
 
-- **Saldo sob concorrência (R5 e R6):** reservar e cancelar leem o saldo, calculam e gravam,
-  sem trava. Duas reservas simultâneas do mesmo aluno em horários diferentes podem ler o
-  mesmo saldo e gastar mais créditos do que ele tem; dois cancelamentos simultâneos da
-  mesma aula podem devolver o crédito duas vezes. A R3 está protegida pelo índice único,
-  mas o saldo não. Correção: decremento atômico no banco (`saldo >= 1` na própria
-  atualização), restrição `CHECK (saldo >= 0)` e mudança de status condicionada a
-  "ainda reservada", tudo na mesma transação
-- **Falhar ao subir sem banco em produção:** sem `DATABASE_URL`, `src/server.ts` cai para a
-  memória e só registra um log; em produção isso perderia os dados no primeiro reinício.
-  Recusar a subida quando `NODE_ENV=production` e a variável faltar
-- **Encerramento limpo do contêiner:** o `CMD` roda `sh -c "prisma migrate deploy && node ..."`,
-  e o `sh` pode não repassar o `SIGTERM` ao Node, então o `docker stop` espera o prazo e
-  mata o processo. Usar `exec node ...` ou um init (`tini`) e tratar o sinal para fechar o
-  Fastify e o Prisma
-- **Readiness de verdade:** `/health` responde `ok` sem tocar no banco, então a API parece
-  saudável mesmo com o Postgres fora. Separar liveness de readiness (com uma consulta
-  simples ao banco) e adicionar `healthcheck` ao serviço `api` no Compose
+- **Disputa de saldo sob carga:** a corrida do saldo (R5 e R6) foi corrigida em 16/11/2026
+  (ADR 0002) e tem teste de concorrência, mas o smoke k6 não disputa crédito nem horário.
+  Um cenário de carga com vários pedidos do mesmo aluno confirmaria o comportamento no
+  Postgres sob pressão
+- **Readiness durante o encerramento:** o `/ready` continua respondendo `200` entre o
+  `SIGTERM` e o fechamento. Atrás de um balanceador, responder `503` nesse intervalo
+  tiraria a instância do rodízio antes de ela parar
 - **Fuso configurável:** `-03:00` e o cálculo de hora cheia estão fixos em
   `src/domain/horario.ts`, válidos porque `America/Fortaleza` não tem horário de verão. Ler o
   fuso da configuração e usar `Intl` ou `Temporal` removeria a premissa
@@ -220,6 +213,5 @@ Levantados na revisão final do código, em ordem aproximada de prioridade:
   `politica-cancelamento.ts`, e a janela de uma hora da reserva está fixa no caso de uso.
   Centralizar em `src/domain/horario.ts`; se `casos-de-uso.ts` crescer, separar um arquivo por
   caso de uso
-- **Testes e cobertura:** não há teste de concorrência para o saldo (R5 e R6). `repositorios.ts`
-  e `tipos.ts` aparecem com 0% por serem só tipos; excluí-los da cobertura deixaria o
-  relatório fiel
+- **Testes e cobertura:** `repositorios.ts` e `tipos.ts` aparecem com 0% por serem só tipos;
+  excluí-los da cobertura deixaria o relatório fiel
