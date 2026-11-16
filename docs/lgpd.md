@@ -1,0 +1,73 @@
+# Dados pessoais (LGPD)
+
+O que o sistema guarda sobre pessoas, por quê e por quanto tempo. Vale para a versão com
+contas de acesso (etapa 4 da fase 2).
+
+> **Rascunho técnico, não parecer jurídico.** Foi escrito por mim com apoio de IA a partir
+> da Lei 13.709/2018. Antes de pôr o sistema em uso com alunos reais, a base legal, os
+> prazos e o texto de aviso ao aluno precisam ser validados com quem entende do assunto.
+
+## Papéis
+
+- **Controlador:** o instrutor, que decide para que os dados são usados.
+- **Operador:** quem hospeda e mantém o sistema para ele (hoje, eu).
+- **Titulares:** os alunos, o instrutor e quem tem conta de administrador.
+
+## O que é guardado
+
+| Dado | Onde | Para quê |
+|---|---|---|
+| Nome do aluno | `Aluno.nome` | O instrutor saber de quem é a aula na agenda |
+| E-mail | `Usuario.email` | Identificar a conta no login (aluno, instrutor e administrador) |
+| Hash da senha | `Usuario.senhaHash` | Conferir a senha no login. A senha em si nunca é guardada (scrypt com sal) |
+| Sessões | `Sessao` | Manter o login. Guarda o resumo (SHA-256) do token, o papel e a validade |
+| Aulas e saldo | `Aula`, `Pacote` | O serviço em si: agenda e créditos |
+
+**Não é guardado:** CPF, telefone, endereço, data de nascimento, dados de pagamento, dados
+de saúde ou qualquer dado sensível. Os logs da aplicação registram método, rota, status e
+duração; não registram corpo de requisição, e-mail, senha nem token.
+
+## Base legal (a validar)
+
+Execução de contrato (art. 7º, V): o aluno contratou aulas com o instrutor, e nome, e-mail
+e agenda são o mínimo para ele marcar essas aulas. Por isso o cadastro não pede
+consentimento separado: não há uso além do serviço contratado (nada de marketing nem
+compartilhamento com terceiros). Se um uso novo aparecer, como lembretes por WhatsApp,
+ele precisa de base própria antes de ser implementado.
+
+## Retenção
+
+| Dado | Prazo | Situação |
+|---|---|---|
+| Sessão | Expira em `SESSAO_DURACAO_HORAS` (padrão 7 dias) ou no logout | Implementado. A sessão expirada é apagada quando alguém tenta usá-la; **falta** uma limpeza periódica das que ninguém usou de novo |
+| Conta, nome e e-mail | Enquanto o aluno for aluno do instrutor | **Falta** o fluxo de exclusão: hoje só é possível apagar direto no banco |
+| Aulas e saldo | A definir com o instrutor (histórico das aulas dadas) | **Falta** definir |
+
+## Direitos do titular
+
+| Direito (art. 18) | Situação |
+|---|---|
+| Acesso aos dados | Parcial: o aluno vê o que informou no cadastro; não há tela ou endpoint de "meus dados" |
+| Correção | **Falta:** não há como trocar nome, e-mail ou senha pela API |
+| Eliminação | **Falta:** não há exclusão de conta pela API |
+| Portabilidade | **Falta** |
+
+Enquanto esses fluxos não existem, o pedido é atendido à mão pelo instrutor ou por mim,
+direto no banco. Isso serve para um piloto pequeno, não para vender o sistema.
+
+## Segurança
+
+- Senha com scrypt e sal aleatório por conta; comparação em tempo constante.
+- Token de sessão aleatório de 256 bits; o banco guarda só o resumo dele.
+- Login responde igual para e-mail desconhecido e senha errada.
+- Cada aluno só reserva e cancela as próprias aulas; só o instrutor lista alunos.
+- **Falta:** limite de tentativas de login, HTTPS (depende do deploy), proteção do
+  `/metrics`, troca e recuperação de senha, e um plano de resposta a incidente.
+
+## Antes de usar com alunos reais
+
+1. Validar a base legal e este documento.
+2. Escrever o aviso de privacidade que o aluno lê ao criar a conta.
+3. Implementar exclusão de conta e troca de senha.
+4. Limitar tentativas de login e servir só por HTTPS.
+5. Definir com o instrutor o prazo de guarda do histórico de aulas.

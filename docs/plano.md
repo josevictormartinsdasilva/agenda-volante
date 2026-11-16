@@ -12,7 +12,9 @@ segurança, depois o que o instrutor e o aluno enxergam. Uma etapa por vez.
 | 1 | Saldo sob concorrência (R5 e R6): `creditar`/`debitar`/`cancelar` atômicos, `emTransacao`, `CHECK (saldo >= 0)`, testes de concorrência, ADR 0002 | feito em 16/11. **Falta confirmar na CI** o contrato contra o Postgres e a migration (sem Docker no ambiente da IA) |
 | 2 | Robustez operacional: recusar a subida sem `DATABASE_URL` em produção; encerramento limpo no `SIGTERM`; readiness que consulta o banco e `healthcheck` no Compose | feito em 16/11. **Falta conferir no Docker** (sem Docker no ambiente da IA): `docker compose up --build` deixa a API `healthy`, e `docker stop` encerra em menos de 10 s com o log "encerrando a aplicação" |
 | 3 | Contrato: schemas do `docs/openapi.yaml` validando corpos nas rotas do Fastify (ou nos testes) | feito em 16/11, nos testes: a entrada de cada rota é comparada com o contrato e as respostas do fluxo são validadas com Ajv. Achou e corrigiu uma divergência (`pattern` da `data`) |
-| 4 | Autenticação: separar instrutor e aluno; proteger as rotas do instrutor e o `/metrics`. Decisão vira ADR | pendente |
+| 4 | Autenticação: contas com e-mail e senha, login com sessão no banco, papéis admin, instrutor e aluno nas rotas, comando `admin:criar` para a primeira conta, ADR 0003 e `docs/lgpd.md` | feito em 16/11. **Falta confirmar na CI** as tabelas novas no Postgres e **rodar o k6 de novo** (o p95 medido é de antes do login) e **testar o `admin:criar` no contêiner** (com TTY, a senha não pode aparecer) |
+| 4b | Endurecer o login: limite de tentativas, limpeza das sessões expiradas e proteção do `/metrics` | pendente |
+| 4c | Conta do aluno: trocar senha, recuperar senha (exige envio de e-mail, a decidir), excluir conta e `GET /minhas-aulas` | pendente |
 | 5 | Interface web do aluno (celular): ver horários livres, reservar e cancelar | pendente |
 | 6 | Deploy em ambiente acessível ao instrutor, com backup do banco | pendente |
 | 7 | Atualizar Prisma 7 e Vitest 5 (`npm audit`) | pendente |
