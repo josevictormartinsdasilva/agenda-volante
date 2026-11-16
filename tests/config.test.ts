@@ -25,6 +25,20 @@ describe('carregarConfig', () => {
     );
   });
 
+  it('em produção recusa subir sem DATABASE_URL, em vez de guardar os dados em memória', () => {
+    expect(() => carregarConfig({ NODE_ENV: 'production' })).toThrow(/DATABASE_URL é obrigatória/);
+    expect(() => carregarConfig({ NODE_ENV: 'production', DATABASE_URL: '' })).toThrow(
+      /DATABASE_URL é obrigatória/,
+    );
+  });
+
+  it('em produção com DATABASE_URL, e fora de produção sem ela, sobe normalmente', () => {
+    const url = 'postgresql://u:s@db:5432/x';
+
+    expect(carregarConfig({ NODE_ENV: 'production', DATABASE_URL: url }).databaseUrl).toBe(url);
+    expect(carregarConfig({ NODE_ENV: 'development' }).databaseUrl).toBeUndefined();
+  });
+
   it('falha cedo com valor inválido, em vez de subir com configuração errada', () => {
     expect(() => carregarConfig({ PORT: 'abc' })).toThrow(/PORT inválida/);
   });
