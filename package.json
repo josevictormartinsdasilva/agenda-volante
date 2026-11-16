@@ -1,6 +1,6 @@
 {
   "name": "agenda-volante",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "API de agendamento de aulas para instrutor de trânsito autônomo",
   "type": "module",
