@@ -99,6 +99,27 @@ export class MuitasTentativas extends ErroDeDominio {
   }
 }
 
+/** Quem está logado errou a própria senha ao confirmar uma operação. */
+export class SenhaIncorreta extends ErroDeDominio {
+  constructor() {
+    super('Senha incorreta');
+  }
+}
+
+/** Código de redefinição errado, já usado, vencido ou de um e-mail sem conta. */
+export class CodigoInvalido extends ErroDeDominio {
+  constructor() {
+    super('Código inválido ou expirado');
+  }
+}
+
+/** O aluno existe, mas não tem conta de acesso (cadastrado antes das contas). */
+export class ContaNaoEncontrada extends ErroDeDominio {
+  constructor() {
+    super('Esse aluno não tem conta de acesso');
+  }
+}
+
 /** Sem token, token desconhecido ou sessão expirada. */
 export class NaoAutenticado extends ErroDeDominio {
   constructor() {

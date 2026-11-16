@@ -4,6 +4,8 @@ import {
   AlunoNaoEncontrado,
   AulaJaCancelada,
   AulaNaoEncontrada,
+  CodigoInvalido,
+  ContaNaoEncontrada,
   CredenciaisInvalidas,
   DataInvalida,
   EmailJaCadastrado,
@@ -15,6 +17,7 @@ import {
   MuitasTentativas,
   NaoAutenticado,
   SaldoInsuficiente,
+  SenhaIncorreta,
 } from '../domain/erros.js';
 
 type ClasseDeErro = new (...args: never[]) => ErroDeDominio;
@@ -22,11 +25,14 @@ type ClasseDeErro = new (...args: never[]) => ErroDeDominio;
 /** Cada regra violada vira um status HTTP; o texto da mensagem nunca é inspecionado. */
 const STATUS_POR_ERRO: ReadonlyArray<readonly [ClasseDeErro, number]> = [
   [DataInvalida, 400],
+  [CodigoInvalido, 400],
   [CredenciaisInvalidas, 401],
   [NaoAutenticado, 401],
   [AcessoNegado, 403],
+  [SenhaIncorreta, 403],
   [AlunoNaoEncontrado, 404],
   [AulaNaoEncontrada, 404],
+  [ContaNaoEncontrada, 404],
   [HorarioOcupado, 409],
   [AulaJaCancelada, 409],
   [EmailJaCadastrado, 409],

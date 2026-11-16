@@ -31,13 +31,23 @@ enum Papel {
 /// Conta de acesso. O e-mail é dado pessoal (ver docs/lgpd.md); a senha nunca é guardada,
 /// só o hash (scrypt).
 model Usuario {
-  id        String   @id
-  email     String   @unique
-  senhaHash String
-  papel     Papel
-  alunoId   String?  @unique
-  aluno     Aluno?   @relation(fields: [alunoId], references: [id])
-  sessoes   Sessao[]
+  id                  String               @id
+  email               String               @unique
+  senhaHash           String
+  papel               Papel
+  alunoId             String?              @unique
+  aluno               Aluno?               @relation(fields: [alunoId], references: [id])
+  sessoes             Sessao[]
+  codigoDeRedefinicao CodigoDeRedefinicao?
+}
+
+/// Código de redefinição de senha: um por conta, de uso único e com validade.
+/// Guarda o SHA-256 do código; o código em si só existe na resposta a quem o gerou.
+model CodigoDeRedefinicao {
+  usuarioId  String   @id
+  codigoHash String
+  expiraEm   DateTime @db.Timestamptz(3)
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 }
 
 /// Sessão de login. A chave é o SHA-256 do token: o token em si nunca é gravado.
@@ -77,4 +87,5 @@ model Aula {
   aluno   Aluno      @relation(fields: [alunoId], references: [id])
 
   @@index([inicio])
+  @@index([alunoId])
 }

@@ -1,4 +1,12 @@
-import type { Aluno, Aula, Pacote, Papel, Sessao, Usuario } from './tipos.js';
+import type {
+  Aluno,
+  Aula,
+  CodigoDeRedefinicao,
+  Pacote,
+  Papel,
+  Sessao,
+  Usuario,
+} from './tipos.js';
 
 /**
  * Portas de persistência (Repository). O domínio e os casos de uso dependem só destas
@@ -20,7 +28,24 @@ export interface UsuarioRepository {
    */
   criar(usuario: Usuario): Promise<void>;
   buscarPorEmail(email: string): Promise<Usuario | undefined>;
+  buscarPorId(id: string): Promise<Usuario | undefined>;
+  /** A conta de um aluno (cada aluno tem no máximo uma). */
+  buscarPorAluno(alunoId: string): Promise<Usuario | undefined>;
   listarPorPapel(papel: Papel): Promise<Usuario[]>;
+  trocarSenha(id: string, senhaHash: string): Promise<void>;
+  remover(id: string): Promise<void>;
+}
+
+export interface CodigoDeRedefinicaoRepository {
+  /** Grava o código da conta, substituindo o anterior: só o mais novo vale. */
+  salvar(codigo: CodigoDeRedefinicao): Promise<void>;
+  /**
+   * Apaga o código se ele for o da conta e ainda valer em `agora`, numa operação só.
+   * Devolve se apagou: de dois consumos simultâneos, só um recebe `true`.
+   */
+  consumir(usuarioId: string, codigoHash: string, agora: Date): Promise<boolean>;
+  /** Idempotente. */
+  remover(usuarioId: string): Promise<void>;
 }
 
 export interface SessaoRepository {
@@ -30,6 +55,8 @@ export interface SessaoRepository {
   remover(tokenHash: string): Promise<void>;
   /** Remove as sessões que expiram até `ate` (inclusive). Devolve quantas removeu. */
   removerExpiradas(ate: Date): Promise<number>;
+  /** Remove as sessões da conta, menos a de `excetoTokenHash`. Devolve quantas removeu. */
+  removerDoUsuario(usuarioId: string, excetoTokenHash?: string): Promise<number>;
 }
 
 /**
@@ -69,12 +96,15 @@ export interface AulaRepository {
   buscarPorId(id: string): Promise<Aula | undefined>;
   /** Todas as aulas (reservadas e canceladas) que começam no intervalo. */
   listarEntre(de: Date, ate: Date): Promise<Aula[]>;
+  /** Todas as aulas do aluno, de qualquer status, em ordem de início. */
+  listarDoAluno(alunoId: string): Promise<Aula[]>;
 }
 
 export interface Repositorios {
   alunos: AlunoRepository;
   usuarios: UsuarioRepository;
   sessoes: SessaoRepository;
+  codigos: CodigoDeRedefinicaoRepository;
   pacotes: PacoteRepository;
   disponibilidade: DisponibilidadeRepository;
   aulas: AulaRepository;

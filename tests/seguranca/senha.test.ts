@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { conferirSenha, gerarHashDaSenha } from '../../src/seguranca/senha.js';
-import { gerarToken, resumirToken } from '../../src/seguranca/token.js';
+import { gerarCodigoCurto, gerarToken, resumirToken } from '../../src/seguranca/token.js';
 
 describe('hash de senha (scrypt)', () => {
   it('confere a senha certa e recusa a errada', async () => {
@@ -22,6 +22,15 @@ describe('hash de senha (scrypt)', () => {
   it('recusa, sem lançar, um hash em formato desconhecido', async () => {
     expect(await conferirSenha('qualquer', 'texto-que-nao-e-hash')).toBe(false);
     expect(await conferirSenha('qualquer', 'scrypt:00:00')).toBe(false);
+  });
+});
+
+describe('código curto de redefinição', () => {
+  it('tem 8 caracteres sem os ambíguos (0, O, 1, I, L), em dois grupos, e varia', () => {
+    const codigos = new Set(Array.from({ length: 200 }, gerarCodigoCurto));
+
+    for (const codigo of codigos) expect(codigo).toMatch(/^[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$/);
+    expect(codigos.size).toBe(200);
   });
 });
 

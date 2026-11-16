@@ -120,6 +120,89 @@ export function contratoDeRepositorios(
       expect(await repos.sessoes.buscar('resumo-1')).toBeUndefined();
     });
 
+    it('usuário: busca por id e pelo aluno, troca o hash da senha e remove', async () => {
+      await repos.usuarios.criar(CONTA_DA_ANA);
+      await repos.usuarios.criar(CONTA_DO_INSTRUTOR);
+
+      expect(await repos.usuarios.buscarPorId('u-ana')).toEqual(CONTA_DA_ANA);
+      expect(await repos.usuarios.buscarPorId('fantasma')).toBeUndefined();
+      expect(await repos.usuarios.buscarPorAluno('ana')).toEqual(CONTA_DA_ANA);
+      expect(await repos.usuarios.buscarPorAluno('sem-conta')).toBeUndefined();
+
+      await repos.usuarios.trocarSenha('u-ana', 'hash-novo');
+      expect((await repos.usuarios.buscarPorEmail('ana@exemplo.com'))?.senhaHash).toBe('hash-novo');
+
+      await repos.usuarios.remover('u-ana');
+      expect(await repos.usuarios.buscarPorEmail('ana@exemplo.com')).toBeUndefined();
+      expect(await repos.usuarios.buscarPorId('u-instrutor')).toEqual(CONTA_DO_INSTRUTOR);
+    });
+
+    it('sessão: remove todas as do usuário, menos a indicada, e devolve quantas', async () => {
+      await repos.usuarios.criar(CONTA_DA_ANA);
+      await repos.usuarios.criar(CONTA_DO_INSTRUTOR);
+      const sessao = (tokenHash: string, usuarioId: string) => ({
+        tokenHash,
+        usuarioId,
+        papel: 'aluno' as const,
+        alunoId: null,
+        expiraEm: new Date('2026-11-27T12:00:00.000Z'),
+      });
+      for (const s of [sessao('a1', 'u-ana'), sessao('a2', 'u-ana'), sessao('a3', 'u-ana'), sessao('i1', 'u-instrutor')]) {
+        await repos.sessoes.salvar(s);
+      }
+
+      expect(await repos.sessoes.removerDoUsuario('u-ana', 'a2')).toBe(2);
+      expect(await repos.sessoes.buscar('a2')).toBeDefined();
+      expect(await repos.sessoes.buscar('i1')).toBeDefined();
+
+      expect(await repos.sessoes.removerDoUsuario('u-ana')).toBe(1);
+      expect(await repos.sessoes.buscar('a2')).toBeUndefined();
+    });
+
+    it('código de redefinição: um por usuário, consumido uma vez só, e só se for o certo e não vencido', async () => {
+      await repos.usuarios.criar(CONTA_DA_ANA);
+      const agora = new Date('2026-11-16T12:00:00.000Z');
+      const daqui1h = new Date('2026-11-16T13:00:00.000Z');
+      await repos.codigos.salvar({ usuarioId: 'u-ana', codigoHash: 'antigo', expiraEm: daqui1h });
+      await repos.codigos.salvar({ usuarioId: 'u-ana', codigoHash: 'novo', expiraEm: daqui1h });
+
+      expect(await repos.codigos.consumir('u-ana', 'antigo', agora)).toBe(false); // substituído
+      expect(await repos.codigos.consumir('u-ana', 'novo', daqui1h)).toBe(false); // vence no instante
+      expect(await repos.codigos.consumir('u-ana', 'novo', agora)).toBe(true);
+      expect(await repos.codigos.consumir('u-ana', 'novo', agora)).toBe(false); // já usado
+    });
+
+    it('código de redefinição: de dois consumos simultâneos, só um vale; remover é idempotente', async () => {
+      await repos.usuarios.criar(CONTA_DA_ANA);
+      const agora = new Date('2026-11-16T12:00:00.000Z');
+      await repos.codigos.salvar({
+        usuarioId: 'u-ana',
+        codigoHash: 'c',
+        expiraEm: new Date('2026-11-16T13:00:00.000Z'),
+      });
+
+      const consumos = await Promise.all([
+        repos.codigos.consumir('u-ana', 'c', agora),
+        repos.codigos.consumir('u-ana', 'c', agora),
+      ]);
+      expect(consumos.filter(Boolean)).toHaveLength(1);
+
+      await repos.codigos.remover('u-ana');
+      await expect(repos.codigos.remover('u-ana')).resolves.toBeUndefined();
+    });
+
+    it('aula: lista as do aluno, de qualquer status, em ordem de início', async () => {
+      await repos.alunos.salvar({ id: 'bia', nome: 'Bia' });
+      await repos.aulas.salvar(aula('a3', H12));
+      await repos.aulas.salvar(aula('a1', H10, 'cancelada'));
+      await repos.aulas.salvar({ ...aula('b1', H11), alunoId: 'bia' });
+
+      const daAna = await repos.aulas.listarDoAluno('ana');
+
+      expect(daAna.map((a) => a.id)).toEqual(['a1', 'a3']);
+      expect(await repos.aulas.listarDoAluno('ninguem')).toEqual([]);
+    });
+
     it('sessão: remove as expiradas até o instante dado (inclusive) e devolve quantas', async () => {
       await repos.usuarios.criar(CONTA_DA_ANA);
       const sessao = (tokenHash: string, expiraEm: string) => ({

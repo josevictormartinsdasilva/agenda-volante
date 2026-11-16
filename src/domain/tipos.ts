@@ -50,6 +50,16 @@ export interface Sessao {
   readonly expiraEm: Date;
 }
 
+/**
+ * Código de redefinição de senha: um por conta, de uso único, com validade. Guarda o
+ * resumo (hash) do código, nunca o código.
+ */
+export interface CodigoDeRedefinicao {
+  readonly usuarioId: string;
+  readonly codigoHash: string;
+  readonly expiraEm: Date;
+}
+
 /** Quem está fazendo a requisição, depois de conferido o token. */
 export interface Identidade {
   readonly usuarioId: string;

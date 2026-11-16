@@ -31,6 +31,15 @@ sem precisar interromper o instrutor.
 | Consultar horários livres | não | sim | sim |
 | Reservar aula | não | para qualquer aluno | só para si |
 | Cancelar aula | não | qualquer uma | só as próprias |
+| Ver as próprias aulas e o saldo | não | não | sim |
+| Gerar código para o aluno que esqueceu a senha | não | sim | não |
+| Trocar a própria senha | sim | sim | sim |
+| Excluir a própria conta | não | não | sim |
+
+Quem esqueceu a senha recebe do instrutor um código de uso único, que vale 1 hora, e cria
+a senha nova sozinho: o instrutor não vê nem define a senha. Ao excluir a conta, as aulas
+futuras do aluno são canceladas (o horário volta a ficar livre) e as passadas ficam no
+histórico, sem o nome.
 
 O administrador cuida das contas, não da agenda. A primeira conta de administrador é
 criada no servidor com `npm run admin:criar`.

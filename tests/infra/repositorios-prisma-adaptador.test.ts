@@ -15,8 +15,9 @@ const AULA = { id: 'a1', alunoId: 'ana', inicio: H10, fim: new Date('2026-11-20T
 function criarDbFalso() {
   const db = {
     aluno: { upsert: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
-    usuario: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
+    usuario: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), delete: vi.fn() },
     sessao: { create: vi.fn(), findUnique: vi.fn(), deleteMany: vi.fn() },
+    codigoDeRedefinicao: { upsert: vi.fn(), deleteMany: vi.fn() },
     pacote: { upsert: vi.fn(), updateManyAndReturn: vi.fn(), findUnique: vi.fn() },
     disponibilidade: { createMany: vi.fn(), findMany: vi.fn() },
     aula: { upsert: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
@@ -84,6 +85,66 @@ describe('adaptador Prisma', () => {
 
     expect(await repos.sessoes.removerExpiradas(H10)).toBe(3);
     expect(db.sessao.deleteMany).toHaveBeenCalledWith({ where: { expiraEm: { lte: H10 } } });
+  });
+
+  it('conta: busca por id e por aluno (undefined sem linha), troca a senha e remove', async () => {
+    const { db, repos } = criarDbFalso();
+    db.usuario.findUnique.mockResolvedValue(null);
+
+    expect(await repos.usuarios.buscarPorId('u1')).toBeUndefined();
+    expect(await repos.usuarios.buscarPorAluno('ana')).toBeUndefined();
+    await repos.usuarios.trocarSenha('u1', 'hash-novo');
+    await repos.usuarios.remover('u1');
+
+    expect(db.usuario.findUnique).toHaveBeenCalledWith({ where: { id: 'u1' } });
+    expect(db.usuario.findUnique).toHaveBeenCalledWith({ where: { alunoId: 'ana' } });
+    expect(db.usuario.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { senhaHash: 'hash-novo' } });
+    expect(db.usuario.delete).toHaveBeenCalledWith({ where: { id: 'u1' } });
+  });
+
+  it('sessão: remove as do usuário, com ou sem uma sessão poupada', async () => {
+    const { db, repos } = criarDbFalso();
+    db.sessao.deleteMany.mockResolvedValue({ count: 2 });
+
+    expect(await repos.sessoes.removerDoUsuario('u1', 'poupar')).toBe(2);
+    await repos.sessoes.removerDoUsuario('u1');
+
+    expect(db.sessao.deleteMany).toHaveBeenCalledWith({
+      where: { usuarioId: 'u1', tokenHash: { not: 'poupar' } },
+    });
+    expect(db.sessao.deleteMany).toHaveBeenCalledWith({ where: { usuarioId: 'u1' } });
+  });
+
+  it('código: salva por usuário e consome com um DELETE condicionado ao código e à validade', async () => {
+    const { db, repos } = criarDbFalso();
+    const codigo = { usuarioId: 'u1', codigoHash: 'h', expiraEm: H11 };
+    db.codigoDeRedefinicao.deleteMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 0 });
+
+    await repos.codigos.salvar(codigo);
+    expect(await repos.codigos.consumir('u1', 'h', H10)).toBe(true);
+    expect(await repos.codigos.consumir('u1', 'h', H10)).toBe(false);
+    await repos.codigos.remover('u1');
+
+    expect(db.codigoDeRedefinicao.upsert).toHaveBeenCalledWith({
+      where: { usuarioId: 'u1' },
+      create: codigo,
+      update: { codigoHash: 'h', expiraEm: H11 },
+    });
+    expect(db.codigoDeRedefinicao.deleteMany).toHaveBeenCalledWith({
+      where: { usuarioId: 'u1', codigoHash: 'h', expiraEm: { gt: H10 } },
+    });
+    expect(db.codigoDeRedefinicao.deleteMany).toHaveBeenLastCalledWith({ where: { usuarioId: 'u1' } });
+  });
+
+  it('aulas do aluno: filtra pelo aluno e ordena pelo início', async () => {
+    const { db, repos } = criarDbFalso();
+    db.aula.findMany.mockResolvedValue([AULA]);
+
+    expect(await repos.aulas.listarDoAluno('ana')).toEqual([AULA]);
+    expect(db.aula.findMany).toHaveBeenCalledWith({ where: { alunoId: 'ana' }, orderBy: { inicio: 'asc' } });
   });
 
   it('repassa qualquer outro erro sem disfarçá-lo de horário ocupado', async () => {

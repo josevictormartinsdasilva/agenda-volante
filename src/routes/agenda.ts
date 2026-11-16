@@ -26,6 +26,12 @@ export function agendaRoutes(casos: CasosDeUso, guarda: Guarda) {
   return async (app: FastifyInstance): Promise<void> => {
     app.get('/alunos', soInstrutor, async () => ({ alunos: await casos.listarAlunos() }));
 
+    app.get('/minhas-aulas', { onRequest: guarda('aluno') }, async (req) => {
+      const { alunoId } = identidadeDe(req);
+      // A guarda garante o papel aluno, e toda conta de aluno aponta para um aluno.
+      return casos.aulasDoAluno(alunoId as string);
+    });
+
     app.post<{ Params: { id: string }; Body: { quantidade: number } }>(
       '/alunos/:id/pacote',
       {
