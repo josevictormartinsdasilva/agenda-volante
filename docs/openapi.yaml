@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agenda Volante
-  version: 0.4.0
+  version: 0.1.0
   description: |
     API de agendamento de aulas de um instrutor de trânsito autônomo. O aluno consulta
     os horários livres e reserva sem interromper o instrutor.
@@ -13,15 +13,6 @@ info:
     - **R4** só se reserva dentro da disponibilidade publicada;
     - **R5** só reserva quem tem saldo no pacote;
     - **R6** cancelar com 48 h ou mais de antecedência devolve o crédito (`CANCELAMENTO_ANTECEDENCIA_HORAS`).
-
-    **Autenticação:** `POST /sessoes` troca e-mail e senha por um token, enviado nas demais
-    chamadas em `Authorization: Bearer <token>`. Três papéis:
-    - **admin** cadastra instrutores e não opera a agenda. A conta de administrador não é
-      criada pela API: nasce do comando `npm run admin:criar`, no servidor;
-    - **instrutor** administra a agenda (alunos, pacotes, disponibilidade);
-    - **aluno** consulta horários e reserva e cancela só as próprias aulas.
-
-    Sem token a resposta é `401`; com token mas sem permissão, `403`.
 
     Todas as datas e horas trafegam em UTC (ISO 8601). O parâmetro `data` é um dia
     `AAAA-MM-DD` lido no fuso `America/Fortaleza`.
@@ -43,25 +34,16 @@ tags:
     description: Publicação da disponibilidade
   - name: Alunos
     description: Cadastro de aluno e registro do pacote vendido
-  - name: Sessões
-    description: Login e logout
-  - name: Administração
-    description: Contas de instrutor, criadas pelo administrador
 
 paths:
   /aulas:
     post:
       tags: [Aulas]
       operationId: reservarAula
-      security:
-        - tokenDeSessao: []
       summary: Reserva uma aula
       description: |
         Valida R1 a R5 e consome 1 crédito do pacote do aluno. A aula dura o
         valor de `DURACAO_AULA_MINUTOS` (padrão 50 min).
-
-        O aluno reserva para si: o `alunoId` vem da sessão e não precisa ser enviado
-        (enviar o de outro aluno responde `403`). O instrutor informa o `alunoId`.
       requestBody:
         required: true
         content:
@@ -69,6 +51,7 @@ paths:
             schema:
               $ref: '#/components/schemas/ReservaPedido'
             example:
+              alunoId: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
               inicio: '2026-11-20T13:00:00.000Z'
       responses:
         '201':
@@ -89,10 +72,6 @@ paths:
                   saldo: 1
         '400':
           $ref: '#/components/responses/RequisicaoInvalida'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
-        '403':
-          $ref: '#/components/responses/AcessoNegado'
         '404':
           $ref: '#/components/responses/NaoEncontrado'
         '409':
@@ -129,13 +108,8 @@ paths:
     post:
       tags: [Aulas]
       operationId: cancelarAula
-      security:
-        - tokenDeSessao: []
       summary: Cancela uma aula
       description: |
-        O aluno só cancela as próprias aulas; a de outro aluno responde `404`, como se
-        não existisse. O instrutor cancela qualquer uma.
-
         R6: com antecedência igual ou maior que `CANCELAMENTO_ANTECEDENCIA_HORAS` o crédito
         volta ao pacote; depois disso a aula é consumida (`creditoDevolvido: false`).
       parameters:
@@ -160,8 +134,6 @@ paths:
                 creditoDevolvido: true
         '400':
           $ref: '#/components/responses/RequisicaoInvalida'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
         '404':
           $ref: '#/components/responses/NaoEncontrado'
         '409':
@@ -177,8 +149,6 @@ paths:
     get:
       tags: [Agenda]
       operationId: consultarHorariosLivres
-      security:
-        - tokenDeSessao: []
       summary: Lista os horários livres de um dia
       description: Horários publicados, ainda no futuro e sem aula reservada.
       parameters:
@@ -197,15 +167,11 @@ paths:
                   - '2026-11-20T14:00:00.000Z'
         '400':
           $ref: '#/components/responses/RequisicaoInvalida'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
 
   /agenda:
     get:
       tags: [Agenda]
       operationId: consultarAgenda
-      security:
-        - tokenDeSessao: []
       summary: Consulta a agenda do dia (instrutor)
       description: Aulas reservadas no dia, em ordem de horário. Aulas canceladas não aparecem.
       parameters:
@@ -227,17 +193,11 @@ paths:
                     status: reservada
         '400':
           $ref: '#/components/responses/RequisicaoInvalida'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
-        '403':
-          $ref: '#/components/responses/AcessoNegado'
 
   /disponibilidades:
     post:
       tags: [Instrutor]
       operationId: publicarDisponibilidade
-      security:
-        - tokenDeSessao: []
       summary: Publica horários disponíveis
       description: |
         Idempotente: publicar um horário que já existe não o duplica. Todos os horários
@@ -257,10 +217,6 @@ paths:
           description: Horários publicados
         '400':
           $ref: '#/components/responses/RequisicaoInvalida'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
-        '403':
-          $ref: '#/components/responses/AcessoNegado'
         '422':
           description: Algum horário não está em hora cheia (R1)
           content:
@@ -274,13 +230,8 @@ paths:
     post:
       tags: [Alunos]
       operationId: cadastrarAluno
-      summary: Cadastra um aluno com conta de acesso
-      description: |
-        Pública: o próprio aluno cria a conta com nome, e-mail e senha (mínimo de 8
-        caracteres). O e-mail identifica a conta sem diferenciar maiúsculas. A senha nunca é
-        devolvida nem guardada (só o hash). O aluno só reserva depois que o instrutor
-        registrar um pacote.
-      security: []
+      summary: Cadastra um aluno
+      description: Cria o aluno com um identificador gerado pelo servidor. O nome não pode ser vazio.
       requestBody:
         required: true
         content:
@@ -289,177 +240,23 @@ paths:
               $ref: '#/components/schemas/AlunoPedido'
             example:
               nome: Ana
-              email: ana@exemplo.com
-              senha: uma-senha-longa
       responses:
         '201':
-          description: Aluno e conta criados
+          description: Aluno cadastrado
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AlunoComConta'
+                $ref: '#/components/schemas/Aluno'
               example:
                 id: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
                 nome: Ana
-                email: ana@exemplo.com
         '400':
           $ref: '#/components/responses/RequisicaoInvalida'
-        '409':
-          description: Já existe uma conta com esse e-mail
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Erro'
-              example:
-                erro: Já existe uma conta com esse e-mail
-    get:
-      tags: [Alunos]
-      operationId: listarAlunos
-      summary: Lista os alunos (instrutor)
-      description: Alunos em ordem de nome, com o e-mail da conta. Serve para o instrutor achar o aluno ao registrar um pacote.
-      security:
-        - tokenDeSessao: []
-      responses:
-        '200':
-          description: Alunos cadastrados
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AlunosResposta'
-              example:
-                alunos:
-                  - id: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
-                    nome: Ana
-                    email: ana@exemplo.com
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
-        '403':
-          $ref: '#/components/responses/AcessoNegado'
-
-  /instrutores:
-    post:
-      tags: [Administração]
-      operationId: cadastrarInstrutor
-      summary: Cadastra um instrutor (administrador)
-      description: |
-        Cria a conta de um instrutor, que passa a entrar com esse e-mail e senha. A senha
-        nunca é devolvida nem guardada (só o hash).
-      security:
-        - tokenDeSessao: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/InstrutorPedido'
-            example:
-              email: instrutor@exemplo.com
-              senha: uma-senha-longa
-      responses:
-        '201':
-          description: Instrutor cadastrado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Conta'
-              example:
-                id: 2b6f0c1e-9d3a-4f5b-8c7d-6e5f4a3b2c1d
-                email: instrutor@exemplo.com
-        '400':
-          $ref: '#/components/responses/RequisicaoInvalida'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
-        '403':
-          $ref: '#/components/responses/AcessoNegado'
-        '409':
-          description: Já existe uma conta com esse e-mail
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Erro'
-              example:
-                erro: Já existe uma conta com esse e-mail
-
-  /sessoes:
-    post:
-      tags: [Sessões]
-      operationId: entrar
-      summary: Faz login
-      description: |
-        Troca e-mail e senha por um token de sessão, válido por `SESSAO_DURACAO_HORAS`
-        (padrão 168 h). O token só aparece nesta resposta: o servidor guarda apenas um
-        resumo dele. E-mail desconhecido e senha errada dão a mesma resposta.
-
-        Limite de tentativas: 5 por e-mail e 20 por IP a cada 15 minutos (configuráveis).
-        Passou disso, a resposta é `429` até a janela acabar, mesmo com a senha certa.
-        Login certo zera os erros do e-mail.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LoginPedido'
-            example:
-              email: ana@exemplo.com
-              senha: uma-senha-longa
-      responses:
-        '201':
-          description: Sessão aberta
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SessaoAberta'
-              example:
-                token: 3q2-7wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-                expiraEm: '2026-11-27T12:00:00.000Z'
-                papel: aluno
-                alunoId: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
-        '400':
-          $ref: '#/components/responses/RequisicaoInvalida'
-        '401':
-          description: E-mail ou senha inválidos
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Erro'
-              example:
-                erro: E-mail ou senha inválidos
-        '429':
-          description: Tentativas demais para este e-mail ou deste IP
-          headers:
-            Retry-After:
-              description: Segundos até poder tentar de novo
-              schema:
-                type: integer
-                minimum: 1
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Erro'
-              example:
-                erro: Muitas tentativas de login. Tente de novo em 15 minutos
-
-  /sessoes/atual:
-    delete:
-      tags: [Sessões]
-      operationId: sair
-      summary: Faz logout
-      description: Encerra a sessão do token enviado. As outras sessões da mesma conta continuam valendo.
-      security:
-        - tokenDeSessao: []
-      responses:
-        '204':
-          description: Sessão encerrada
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
 
   /alunos/{id}/pacote:
     post:
       tags: [Alunos]
       operationId: registrarPacote
-      security:
-        - tokenDeSessao: []
       summary: Registra o pacote de aulas vendido
       description: Soma a quantidade ao saldo atual do aluno. A venda e o pagamento ficam fora do sistema.
       parameters:
@@ -484,20 +281,10 @@ paths:
                 saldo: 10
         '400':
           $ref: '#/components/responses/RequisicaoInvalida'
-        '401':
-          $ref: '#/components/responses/NaoAutenticado'
-        '403':
-          $ref: '#/components/responses/AcessoNegado'
         '404':
           $ref: '#/components/responses/NaoEncontrado'
 
 components:
-  securitySchemes:
-    tokenDeSessao:
-      type: http
-      scheme: bearer
-      description: Token devolvido por `POST /sessoes`
-
   parameters:
     AulaId:
       name: id
@@ -519,12 +306,10 @@ components:
       name: data
       in: query
       required: true
-      description: |
-        Dia no formato AAAA-MM-DD, lido no fuso America/Fortaleza. O formato e a existência
-        do dia são conferidos pela regra de negócio, que responde `400` com a mensagem
-        `Data inválida`; por isso o schema não repete o formato.
+      description: Dia no formato AAAA-MM-DD, lido no fuso America/Fortaleza
       schema:
         type: string
+        pattern: '^\d{4}-\d{2}-\d{2}$'
       example: '2026-11-20'
 
   responses:
@@ -536,22 +321,6 @@ components:
             $ref: '#/components/schemas/Erro'
           example:
             erro: 'Data inválida: "amanha" (use AAAA-MM-DD)'
-    NaoAutenticado:
-      description: Sem token, token desconhecido ou sessão expirada
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Erro'
-          example:
-            erro: Faça login para continuar
-    AcessoNegado:
-      description: Autenticado, mas sem permissão para a operação
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Erro'
-          example:
-            erro: Você não tem permissão para esta operação
     NaoEncontrado:
       description: Aluno ou aula não encontrados
       content:
@@ -569,93 +338,21 @@ components:
         erro:
           type: string
           description: Mensagem legível, em português
+    Aluno:
+      type: object
+      required: [id, nome]
+      properties:
+        id:
+          type: string
+        nome:
+          type: string
     AlunoPedido:
       type: object
-      required: [nome, email, senha]
+      required: [nome]
       properties:
         nome:
           type: string
           minLength: 1
-          maxLength: 120
-        email:
-          type: string
-          format: email
-          maxLength: 254
-        senha:
-          type: string
-          minLength: 8
-          maxLength: 128
-    AlunoComConta:
-      type: object
-      required: [id, nome, email]
-      properties:
-        id:
-          type: string
-        nome:
-          type: string
-        email:
-          type:
-            - string
-            - 'null'
-          description: Nulo se o aluno foi cadastrado antes de existir conta de acesso
-    AlunosResposta:
-      type: object
-      required: [alunos]
-      properties:
-        alunos:
-          type: array
-          items:
-            $ref: '#/components/schemas/AlunoComConta'
-    InstrutorPedido:
-      type: object
-      required: [email, senha]
-      properties:
-        email:
-          type: string
-          format: email
-          maxLength: 254
-        senha:
-          type: string
-          minLength: 8
-          maxLength: 128
-    Conta:
-      type: object
-      required: [id, email]
-      properties:
-        id:
-          type: string
-        email:
-          type: string
-    LoginPedido:
-      type: object
-      required: [email, senha]
-      properties:
-        email:
-          type: string
-          minLength: 1
-          maxLength: 254
-        senha:
-          type: string
-          minLength: 1
-          maxLength: 128
-    SessaoAberta:
-      type: object
-      required: [token, expiraEm, papel, alunoId]
-      properties:
-        token:
-          type: string
-          description: 'Enviar no cabeçalho Authorization, como Bearer <token>'
-        expiraEm:
-          type: string
-          format: date-time
-        papel:
-          type: string
-          enum: [admin, instrutor, aluno]
-        alunoId:
-          type:
-            - string
-            - 'null'
-          description: Nulo para o administrador e o instrutor
     Pacote:
       type: object
       required: [alunoId, saldo]
@@ -692,12 +389,11 @@ components:
           enum: [reservada, cancelada]
     ReservaPedido:
       type: object
-      required: [inicio]
+      required: [alunoId, inicio]
       properties:
         alunoId:
           type: string
           minLength: 1
-          description: Só o instrutor precisa informar; o aluno reserva para si
         inicio:
           type: string
           format: date-time

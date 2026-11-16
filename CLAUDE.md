@@ -5,34 +5,36 @@ que o projeto foi planejado, que você não tem.
 
 ## O que é este projeto
 
-API de agendamento de aulas para instrutor de trânsito autônomo (a resolução do Contran
-de dez/2025 permitiu aulas práticas fora de autoescola). O cliente é real: hoje ele agenda
-as aulas pelo celular, muitas vezes durante as próprias aulas. **O sistema resolve o
-agendamento**: o aluno consulta os horários livres e reserva sem interromper o instrutor.
+Trabalho final de uma mini graduação de engenharia de software (Full Cycle).
+**Nível B**: uma API de domínio único com um fluxo principal funcionando de ponta a ponta.
+Desenvolvimento **individual**. Entrega pelo Moodle **até 13/11/2026**; commits depois
+disso não são avaliados.
+
+O cliente é real: um instrutor de trânsito autônomo (a resolução do Contran de dez/2025
+permitiu aulas práticas fora de autoescola). Hoje ele agenda as aulas pelo celular,
+muitas vezes durante as próprias aulas. **O sistema resolve só o agendamento**: o aluno
+consulta os horários livres e reserva sem interromper o instrutor.
 
 - Regras de negócio e escopo: @docs/regras-de-negocio.md
-- Plano e status: @docs/plano.md
+- Plano dia a dia e status: @docs/plano.md
 
-## Fase atual
+## Rubrica (o que a nota avalia)
 
-**Fase 1 (encerrada):** trabalho final da mini graduação Full Cycle, Nível B, entregue em
-13/11/2026. A rubrica do curso não guia mais as decisões.
+| Critério | Peso |
+|---|---|
+| M1 Funciona, código e design (Compose em 1 comando, SOLID, 1 pattern justificado) | 35 |
+| M2 Testes unitários do domínio, 1 teste de integração, coverage mínimo, CI verde | 20 |
+| M3 `.env.example`, segredos fora do repo, logs estruturados, 1 métrica, 1 SLO | 15 |
+| M4 README do primeiro dia, 1 ADR, OpenAPI do endpoint principal, smoke k6 com p95 | 30 |
 
-**Fase 2 (desde 16/11/2026):** o projeto segue como **portfólio**, com a intenção de
-**comercializar depois**. O critério deixa de ser "o mínimo que a rubrica pede" e passa a
-ser "o que um sistema usado por um instrutor de verdade precisa": primeiro não perder nem
-corromper dado, depois segurança (autenticação, LGPD), depois funcionalidade. Sem prazo
-fixo; a ordem está em `docs/plano.md`.
-
-O que vem da fase 1 e não pode regredir: `docker compose up --build` em um comando, CI
-verde, coverage mínimo, README que sobe a aplicação, segredos fora do repo e número só
-com medição.
+O que mais derruba nota: escopo inflado, CI vermelha, README que não sobe a aplicação,
+segredos commitados, teste sem asserção e número sem medição.
 
 ## Stack
 
 Node.js 22, TypeScript (strict, ESM/NodeNext), Fastify 5 (logger = pino),
 Vitest + coverage v8, ESLint 9 (flat config), PostgreSQL 17 via Docker Compose.
-Prisma 6 (Repository como Database Pattern), prom-client, Spectral, k6.
+Planejado: Prisma (Repository como Database Pattern), prom-client, Spectral, k6.
 
 ## Comandos
 
@@ -57,20 +59,6 @@ Antes de dizer que uma tarefa terminou, rode lint, typecheck e test:coverage. Tu
   (48 h de cancelamento, aula de 50 min) são parâmetros, não constantes espalhadas.
 - Dependências apontam para dentro: rotas → casos de uso → domínio. O domínio não
   conhece nada de fora (inversão de dependência via interfaces de repositório).
-- Duas implementações dos repositórios (`src/infra/memoria/` e `src/infra/prisma/`), presas
-  ao mesmo teste de contrato (`tests/infra/contrato-de-repositorios.ts`). Mudou a
-  interface, mudam as duas e o contrato.
-- Autenticação (ADR 0003): papéis `admin` (contas), `instrutor` (agenda) e `aluno`. A rota
-  declara o papel exigido (`guarda('instrutor')`); a regra de posse ("o aluno só mexe na
-  própria aula") fica no caso de uso. Rota nova nasce protegida, e o contrato OpenAPI diz
-  se é pública (`security: []`).
-- Nenhuma credencial de conta em `.env`, Compose ou imagem: o administrador nasce de
-  `npm run admin:criar` (`src/criar-admin.ts`), rodado no servidor.
-- `/metrics` fica numa segunda aplicação Fastify, na porta interna `METRICS_PORT`, que o
-  Compose não publica (ADR 0004). Não o devolva para a porta pública.
-- Concorrência: nunca "ler, calcular e gravar" um valor disputado. A condição vai no
-  próprio comando de gravação (como `debitar` e `cancelar`) e gravações que precisam valer
-  juntas vão em `emTransacao` (ADR 0002).
 
 ## Convenções
 
@@ -82,21 +70,16 @@ Antes de dizer que uma tarefa terminou, rode lint, typecheck e test:coverage. Tu
 
 ## Regras de trabalho com este aluno
 
-O autor mantém o projeto sozinho, usa-o como portfólio e precisa **saber explicar todo o código**.
+O autor é avaliado individualmente e precisa **saber explicar todo o código**.
 
 - **Não faça commit nem push sem pedir.** Proponha a mensagem; ele executa ou autoriza.
 - Ao tomar uma decisão de design, explique em 2 ou 3 frases o porquê e a alternativa
   descartada. Decisões relevantes viram ADR em `docs/adr/`.
 - Ao fim de cada tarefa significativa, adicione uma linha em `docs/ia.md`
-  (nasceu como exigência do curso; segue como registro de transparência do portfólio).
-- **Não amplie o escopo por conta própria.** Siga a ordem de `docs/plano.md`. Captação,
-  pagamento, WhatsApp e agendamento de provas no Detran seguem fora até o autor decidir
-  o contrário. Se algo parecer útil, sugira para "Próximos passos" no README.
-- Dado pessoal novo (telefone, e-mail, documento) só entra depois de tratar a LGPD
-  (base legal, consentimento, retenção).
-- O ambiente da IA não tem Docker nem Postgres: o contrato dos repositórios contra o
-  banco real só roda no CI ou na máquina do autor. Diga isso em vez de afirmar que passou.
+  (o curso exige declarar o uso de IA).
+- **Não amplie o escopo.** Captação, pagamento, WhatsApp e agendamento de provas no
+  Detran estão fora. Se algo parecer útil, sugira para "Próximos passos" no README.
 - Nunca leia, crie com valores reais ou commite `.env`. Novas variáveis vão para
   `.env.example` com valor fictício.
-- Nunca acelere pulando testes ou documentação; se uma etapa ficou grande demais,
-  proponha dividi-la.
+- Se o plano do dia estiver atrasado, avise e sugira o que cortar, em vez de acelerar
+  pulando testes ou documentação.

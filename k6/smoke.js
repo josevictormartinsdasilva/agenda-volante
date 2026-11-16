@@ -10,9 +10,6 @@ import { check } from 'k6';
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
 const ITERACOES = Number(__ENV.ITERACOES || 200);
-// Administrador criado antes com `npm run admin:criar`. Sem padrão: é obrigatório.
-const ADMIN_EMAIL = __ENV.ADMIN_EMAIL;
-const ADMIN_SENHA = __ENV.ADMIN_SENHA;
 const MS_HORA = 3_600_000;
 const MS_DIA = 24 * MS_HORA;
 // A grade é em America/Fortaleza (UTC-3, sem horário de verão).
@@ -39,51 +36,17 @@ export const options = {
 
 const json = { headers: { 'Content-Type': 'application/json' } };
 
-/** Cabeçalhos JSON com o token de sessão. */
-function comToken(token) {
-  return { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } };
-}
-
-/** Faz login e devolve o token. O login usa scrypt (lento de propósito) e fica fora da medição. */
-function entrar(email, senha) {
-  const sessao = http.post(`${BASE_URL}/sessoes`, JSON.stringify({ email, senha }), json);
-  if (sessao.status !== 201) throw new Error(`login de ${email} falhou: ${sessao.status}`);
-  return sessao.json('token');
-}
-
-// Roda uma vez antes da carga: com o administrador, cria um instrutor; com ele, cria um
-// aluno com conta e saldo e publica um horário por iteração. Os e-mails e o dia inicial
-// são sorteados para que reexecuções contra o mesmo banco não colidam (e-mail único e R3).
+// Roda uma vez antes da carga: cria aluno com saldo e publica um horário por iteração.
+// O dia inicial é sorteado para que reexecuções contra o mesmo banco não colidam (R3).
 export function setup() {
-  if (!ADMIN_EMAIL || !ADMIN_SENHA) {
-    throw new Error('defina ADMIN_EMAIL e ADMIN_SENHA (crie a conta com npm run admin:criar)');
-  }
-  const sufixo = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-  const senha = 'senha-de-teste-do-k6';
-
-  const admin = comToken(entrar(ADMIN_EMAIL, ADMIN_SENHA));
-  const emailDoInstrutor = `k6-instrutor-${sufixo}@exemplo.com`;
-  const criado = http.post(
-    `${BASE_URL}/instrutores`,
-    JSON.stringify({ email: emailDoInstrutor, senha }),
-    admin,
-  );
-  if (criado.status !== 201) throw new Error(`cadastro do instrutor falhou: ${criado.status}`);
-  const instrutor = comToken(entrar(emailDoInstrutor, senha));
-
-  const email = `k6-aluno-${sufixo}@exemplo.com`;
-  const aluno = http.post(
-    `${BASE_URL}/alunos`,
-    JSON.stringify({ nome: 'Aluno k6', email, senha }),
-    json,
-  );
+  const aluno = http.post(`${BASE_URL}/alunos`, JSON.stringify({ nome: 'Aluno k6' }), json);
   if (aluno.status !== 201) throw new Error(`cadastro do aluno falhou: ${aluno.status}`);
   const alunoId = aluno.json('id');
 
   const pacote = http.post(
     `${BASE_URL}/alunos/${alunoId}/pacote`,
     JSON.stringify({ quantidade: ITERACOES }),
-    instrutor,
+    json,
   );
   if (pacote.status !== 200) throw new Error(`pacote falhou: ${pacote.status}`);
 
@@ -95,11 +58,10 @@ export function setup() {
   for (let i = 0; i < ITERACOES; i++) {
     inicios.push(new Date(inicioBase + i * MS_HORA).toISOString());
   }
-  const disp = http.post(`${BASE_URL}/disponibilidades`, JSON.stringify({ inicios }), instrutor);
+  const disp = http.post(`${BASE_URL}/disponibilidades`, JSON.stringify({ inicios }), json);
   if (disp.status !== 204) throw new Error(`disponibilidade falhou: ${disp.status}`);
 
-  // Uma sessão do aluno, compartilhada pelos VUs: o que se mede é consultar e reservar.
-  return { token: entrar(email, senha), inicioBase };
+  return { alunoId, inicioBase };
 }
 
 // Cada iteração usa um horário próprio (índice único no teste), então não há disputa
@@ -109,10 +71,7 @@ export default function (dados) {
   const inicio = new Date(dados.inicioBase + indice * MS_HORA);
   const dia = new Date(inicio.getTime() - OFFSET_FORTALEZA_MS).toISOString().slice(0, 10);
 
-  const aluno = comToken(dados.token);
-
   const livres = http.get(`${BASE_URL}/horarios-livres?data=${dia}`, {
-    ...aluno,
     tags: { endpoint: 'horarios_livres' },
   });
   check(livres, {
@@ -123,8 +82,8 @@ export default function (dados) {
 
   const reserva = http.post(
     `${BASE_URL}/aulas`,
-    JSON.stringify({ inicio: inicio.toISOString() }),
-    { ...aluno, tags: { endpoint: 'reservar' } },
+    JSON.stringify({ alunoId: dados.alunoId, inicio: inicio.toISOString() }),
+    { ...json, tags: { endpoint: 'reservar' } },
   );
   check(reserva, {
     'reserva responde 201': (r) => r.status === 201,

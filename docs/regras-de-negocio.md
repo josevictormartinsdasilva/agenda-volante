@@ -21,23 +21,6 @@ sem precisar interromper o instrutor.
 | R5 | O aluno só reserva se tiver saldo de aulas no pacote | — | não |
 | R6 | Cancelar com antecedência mínima devolve o crédito; depois disso, a aula é consumida | 48 h | `CANCELAMENTO_ANTECEDENCIA_HORAS` |
 
-## Quem pode o quê
-
-| Ação | Administrador | Instrutor | Aluno |
-|---|---|---|---|
-| Cadastrar instrutor | sim | não | não |
-| Publicar disponibilidade, ver a agenda do dia | não | sim | não |
-| Listar alunos e registrar pacote vendido | não | sim | não |
-| Consultar horários livres | não | sim | sim |
-| Reservar aula | não | para qualquer aluno | só para si |
-| Cancelar aula | não | qualquer uma | só as próprias |
-
-O administrador cuida das contas, não da agenda. A primeira conta de administrador é
-criada no servidor com `npm run admin:criar`.
-
-O aluno cria a própria conta (nome, e-mail e senha); só reserva depois que o instrutor
-registra um pacote. Dados pessoais: [`lgpd.md`](lgpd.md).
-
 ## Fora do escopo
 
 - **Captação, venda e pagamento:** continuam com o instrutor, por decisão do negócio.
