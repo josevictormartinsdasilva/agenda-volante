@@ -13,12 +13,13 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "start": "node dist/server.js",
+    "admin:criar": "node dist/criar-admin.js",
     "lint": "eslint .",
     "lint:api": "spectral lint docs/openapi.yaml --fail-severity=warn",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "smoke": "docker run --rm -i -e BASE_URL=http://host.docker.internal:3000 grafana/k6 run - < k6/smoke.js"
+    "smoke": "docker run --rm -i -e BASE_URL=http://host.docker.internal:3000 -e ADMIN_EMAIL -e ADMIN_SENHA grafana/k6 run - < k6/smoke.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
