@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { buildApp } from './app.js';
 import { criarCasosDeUso } from './application/casos-de-uso.js';
 import { carregarConfig } from './config.js';
+import { encerrarAoReceberSinal } from './encerramento.js';
 import { CancelamentoComAntecedencia } from './domain/politica-cancelamento.js';
 import { criarRepositoriosEmMemoria } from './infra/memoria/repositorios-em-memoria.js';
 import { criarRepositoriosPrisma } from './infra/prisma/repositorios-prisma.js';
@@ -11,6 +12,7 @@ const config = carregarConfig();
 
 // Composição: único lugar que escolhe as implementações concretas.
 // Com DATABASE_URL a API usa o Postgres; sem ela, guarda tudo em memória (some ao reiniciar).
+// Em produção, `carregarConfig` já recusou a subida sem DATABASE_URL.
 const prisma = config.databaseUrl
   ? new PrismaClient({ datasourceUrl: config.databaseUrl })
   : undefined;
@@ -24,11 +26,16 @@ const casos = criarCasosDeUso({
   gerarId: randomUUID,
 });
 
-const app = buildApp(config, casos);
+// O `/ready` só responde 200 se o banco responder a uma consulta mínima.
+const app = buildApp(config, casos, async () => {
+  if (prisma) await prisma.$queryRaw`SELECT 1`;
+});
 app.log.info({ armazenamento: prisma ? 'postgres' : 'memoria' }, 'repositórios configurados');
 app.addHook('onClose', async () => {
   await prisma?.$disconnect();
 });
+
+encerrarAoReceberSinal(app);
 
 try {
   await app.listen({ port: config.port, host: config.host });
