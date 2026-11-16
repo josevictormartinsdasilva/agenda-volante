@@ -1,32 +1,40 @@
-# Plano de entrega (Nível B)
+# Plano
 
-Atualize o status ao concluir cada item. Entrega: **13/11/2026**.
+Atualize o status ao concluir cada item.
+
+## Fase 2: portfólio, rumo ao uso real (desde 16/11/2026)
+
+Sem prazo fixo. A ordem é a prioridade: primeiro não corromper dado, depois operar com
+segurança, depois o que o instrutor e o aluno enxergam. Uma etapa por vez.
+
+| # | Entrega | Status |
+|---|---|---|
+| 1 | Saldo sob concorrência (R5 e R6): `creditar`/`debitar`/`cancelar` atômicos, `emTransacao`, `CHECK (saldo >= 0)`, testes de concorrência, ADR 0002 | feito em 16/11. **Falta confirmar na CI** o contrato contra o Postgres e a migration (sem Docker no ambiente da IA) |
+| 2 | Robustez operacional: recusar a subida sem `DATABASE_URL` em produção; encerramento limpo no `SIGTERM`; readiness que consulta o banco e `healthcheck` no Compose | feito em 16/11. **Falta conferir no Docker** (sem Docker no ambiente da IA): `docker compose up --build` deixa a API `healthy`, e `docker stop` encerra em menos de 10 s com o log "encerrando a aplicação" |
+| 3 | Contrato: schemas do `docs/openapi.yaml` validando corpos nas rotas do Fastify (ou nos testes) | feito em 16/11, nos testes: a entrada de cada rota é comparada com o contrato e as respostas do fluxo são validadas com Ajv. Achou e corrigiu uma divergência (`pattern` da `data`) |
+| 4 | Autenticação: contas com e-mail e senha, login com sessão no banco, papéis admin, instrutor e aluno nas rotas, comando `admin:criar` para a primeira conta, ADR 0003 e `docs/lgpd.md` | feito em 16/11. **Falta confirmar na CI** as tabelas novas no Postgres e **rodar o k6 de novo** (o p95 medido é de antes do login) e **testar o `admin:criar` no contêiner** (com TTY, a senha não pode aparecer) |
+| 4b | Endurecer o login: limite de tentativas, limpeza das sessões expiradas e proteção do `/metrics` | feito em 16/11 (ADR 0004): 5 tentativas por e-mail e 20 por IP a cada 15 min, limpeza de sessões a cada hora, `/metrics` na porta interna 9100. **Falta conferir no Docker** que a 9100 não aparece fora do Compose |
+| 4c | Conta do aluno: trocar senha, recuperar senha (exige envio de e-mail, a decidir), excluir conta e `GET /minhas-aulas` | pendente |
+| 5 | Interface web do aluno (celular): ver horários livres, reservar e cancelar | pendente |
+| 6 | Deploy em ambiente acessível ao instrutor, com backup do banco | pendente |
+| 7 | Atualizar Prisma 7 e Vitest 5 (`npm audit`) | pendente |
+
+Depois, para comercializar (ordem a decidir): mais de um instrutor, remover
+disponibilidade, extrato de créditos, cadastro ampliado com LGPD, idempotência em
+`POST /aulas`, lembretes. Detalhes em "Próximos passos" do README.
+
+## Fase 1: trabalho do curso (Nível B), entregue em 13/11/2026
 
 | Dia | Entrega | Status |
 |---|---|---|
-| 06/11 | Repositório, README com nível, Compose (API + Postgres), TS, ESLint, CI (install, lint, test) | feito |
-| 07/11 | `src/domain/` com as regras R1–R6 e testes unitários; Strategy ou outro pattern justificado | feito |
-| 08/11 | Prisma + Repository, endpoints do fluxo principal, 1 teste de integração | feito. Contrato dos repositórios confirmado contra o Postgres real e `docker compose up --build` verificado em 09/11 |
-| 09/11 | Métrica com prom-client em `/metrics`, SLO declarado, gitleaks no CI | feito (o job do gitleaks só roda no GitHub; confirmar no primeiro push) |
-| 10/11 | `docs/openapi.yaml` + Spectral no CI, `docs/adr/0001-*.md` (MADR, com alternativa descartada) | feito (confirmar o Spectral e a CI verde no próximo push) |
-| 11/11 | Smoke test k6 e `docs/desempenho.md` com p95 medido | feito. Rodado em 13/11 contra o Compose em clone limpo: p95 de 83,15 ms (`GET /horarios-livres`) e 137,88 ms (`POST /aulas`), 0% de falhas, SLO cumprido |
-| 12/11 | README do primeiro dia revisado, `docs/ia.md`, `CONTRIBUTORS.md`, teste em clone limpo | feito: README revisado (fluxo principal, decisões de design, ADR, `prisma generate`), `docs/ia.md` e `CONTRIBUTORS.md` atualizados; clone limpo (`npm ci`, lint, typecheck, test:coverage, build) verde. `docker compose up --build` em clone limpo verificado em 13/11 (`/health` e `/metrics` respondendo). `.env.example` conferido pelo autor em 13/11 |
-| 13/11 | Folga, envio no Moodle (repo, README, link da CI verde), vídeo opcional | pendente. Checklist abaixo, na ordem |
-
-## Checklist de 13/11 (antes do envio)
-
-Nenhum item depende de código novo; todos exigem o ambiente do autor (Docker, k6, GitHub).
-
-- [x] **Clone limpo + Compose (feito em 13/11):** clonar em pasta nova e rodar `docker compose up --build` (sem `.env`: o Compose tem padrões para tudo). Conferir `GET /health` e `GET /metrics`.
-- [x] **`.env.example` (conferido pelo autor em 13/11):** conferir que tem `PORT`, `HOST`, `LOG_LEVEL`, `DATABASE_URL`, `CANCELAMENTO_ANTECEDENCIA_HORAS`, `DURACAO_AULA_MINUTOS`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` e `TEST_DATABASE_URL`, todas com valores fictícios, e que nenhum segredo real foi commitado.
-- [x] **Smoke k6 (feito em 13/11, SLO cumprido):** com a API no ar, `npm run smoke`; copiar o p95 e as falhas **da saída real** para `docs/desempenho.md` (nada de número estimado) e dizer se o SLO (p95 < 300 ms, falhas < 1%) foi cumprido.
-- [x] **ADR e OpenAPI (feito em 13/11: exemplos conferidos com chamadas reais à API, ADR conferido contra o código; o bug do 500 no cancelamento achado e corrigido):** revisar `docs/adr/0001-*.md` e os exemplos de `docs/openapi.yaml` (pendência registrada em `docs/ia.md`, 10/11).
-- [ ] **Push e CI (push feito em 13/11; falta confirmar a CI verde no GitHub):** push da `develop`; confirmar CI verde, incluindo Spectral e gitleaks (só rodam no GitHub). Se algo falhar, corrigir antes de enviar.
-- [ ] **README:** opcional, dizer que o Compose sobe sem `.env`; conferir que os comandos do "Como rodar" funcionam como escritos.
-- [ ] **Envio no Moodle (até 13/11):** link do repositório, README e link da execução verde da CI. Commits depois do prazo não são avaliados.
-- [ ] **Vídeo:** opcional, só se sobrar tempo.
-
-Se algo atrasar, cortar nesta ordem: vídeo, ajuste opcional do README. Não cortar o p95 medido, a CI verde nem o teste em clone limpo.
+| 06/11 | Repositório, README com nível, Compose (API + Postgres), TS, ESLint, CI | feito |
+| 07/11 | `src/domain/` com as regras R1–R6 e testes unitários; Strategy na política de cancelamento | feito |
+| 08/11 | Prisma + Repository, endpoints do fluxo principal, teste de integração | feito |
+| 09/11 | Métrica em `/metrics`, SLO declarado, gitleaks no CI | feito |
+| 10/11 | `docs/openapi.yaml` + Spectral no CI, ADR 0001 | feito |
+| 11/11 | Smoke k6 e `docs/desempenho.md` | feito. Medido em 13/11: p95 de 83,15 ms (`GET /horarios-livres`) e 137,88 ms (`POST /aulas`), 0% de falhas, SLO cumprido |
+| 12/11 | README do primeiro dia, `docs/ia.md`, `CONTRIBUTORS.md`, clone limpo com Compose | feito |
+| 13/11 | Envio no Moodle | entregue (informado pelo autor em 16/11; a CI verde no GitHub não foi conferida pela IA) |
 
 ## Fluxo principal (o que precisa funcionar de ponta a ponta)
 

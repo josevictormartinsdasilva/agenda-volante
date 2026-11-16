@@ -16,7 +16,7 @@ contratoDeRepositorios(
   'Prisma/Postgres',
   async () => {
     if (!db) throw new Error('TEST_DATABASE_URL não definida');
-    await db.$executeRawUnsafe('TRUNCATE "Aula", "Pacote", "Aluno", "Disponibilidade" CASCADE');
+    await db.$executeRawUnsafe('TRUNCATE "Sessao", "Usuario", "Aula", "Pacote", "Aluno", "Disponibilidade" CASCADE');
     return criarRepositoriosPrisma(db);
   },
   { pular: !db },

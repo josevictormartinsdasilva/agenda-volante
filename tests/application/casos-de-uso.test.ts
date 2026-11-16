@@ -7,26 +7,32 @@ import {
   HorarioOcupado,
   SaldoInsuficiente,
 } from '../../src/domain/erros.js';
-import { criarAmbiente } from '../helpers.js';
+import { criarAluno, criarAmbiente } from '../helpers.js';
 
 const H10 = new Date('2026-11-20T13:00:00.000Z'); // 10h em Fortaleza, 10 dias depois de "agora"
 const H11 = new Date('2026-11-20T14:00:00.000Z');
 const AMANHA_10H = new Date('2026-11-11T13:00:00.000Z'); // 25 h depois de "agora"
 
 async function alunoComPacote(ambiente: ReturnType<typeof criarAmbiente>, saldo: number) {
-  const aluno = await ambiente.casos.cadastrarAluno({ nome: 'Ana' });
+  const aluno = await criarAluno(ambiente, 'Ana');
   await ambiente.casos.registrarPacote(aluno.id, saldo);
   return aluno;
 }
 
-describe('cadastrarAluno e registrarPacote', () => {
-  it('cadastra o aluno com o id gerado e o guarda no repositório', async () => {
-    const { casos, repositorios } = criarAmbiente();
+describe('listarAlunos e registrarPacote', () => {
+  it('lista os alunos em ordem de nome, com o e-mail de quem tem conta', async () => {
+    const ambiente = criarAmbiente();
+    const semConta = await criarAluno(ambiente, 'Bia');
+    const comConta = await ambiente.autenticacao.cadastrarAluno({
+      nome: 'Ana',
+      email: 'ana@exemplo.com',
+      senha: 'senha-da-ana',
+    });
 
-    const aluno = await casos.cadastrarAluno({ nome: 'Ana' });
-
-    expect(aluno).toEqual({ id: 'id-1', nome: 'Ana' });
-    expect(await repositorios.alunos.buscarPorId('id-1')).toEqual(aluno);
+    expect(await ambiente.casos.listarAlunos()).toEqual([
+      { id: comConta.id, nome: 'Ana', email: 'ana@exemplo.com' },
+      { id: semConta.id, nome: 'Bia', email: null },
+    ]);
   });
 
   it('soma os créditos quando o aluno compra outro pacote', async () => {
@@ -111,8 +117,9 @@ describe('reservarAula', () => {
   });
 
   it('trata aluno sem pacote como saldo zero', async () => {
-    const { casos } = criarAmbiente();
-    const aluno = await casos.cadastrarAluno({ nome: 'Bia' });
+    const ambiente = criarAmbiente();
+    const { casos } = ambiente;
+    const aluno = await criarAluno(ambiente, 'Bia');
     await casos.publicarDisponibilidade([H10]);
 
     await expect(casos.reservarAula(aluno.id, H10)).rejects.toBeInstanceOf(SaldoInsuficiente);
@@ -121,7 +128,7 @@ describe('reservarAula', () => {
   it('recusa o segundo aluno no mesmo horário (R3) sem gastar o crédito dele', async () => {
     const ambiente = criarAmbiente();
     const ana = await alunoComPacote(ambiente, 1);
-    const bia = await ambiente.casos.cadastrarAluno({ nome: 'Bia' });
+    const bia = await criarAluno(ambiente, 'Bia');
     await ambiente.casos.registrarPacote(bia.id, 1);
     await ambiente.casos.publicarDisponibilidade([H10]);
     await ambiente.casos.reservarAula(ana.id, H10);
@@ -182,6 +189,55 @@ describe('cancelarAula (R6)', () => {
     const { casos } = criarAmbiente();
 
     await expect(casos.cancelarAula('fantasma')).rejects.toBeInstanceOf(AulaNaoEncontrada);
+  });
+});
+
+describe('saldo sob concorrência (R5 e R6)', () => {
+  it('duas reservas simultâneas do mesmo aluno não gastam mais créditos do que ele tem', async () => {
+    const ambiente = criarAmbiente();
+    const aluno = await alunoComPacote(ambiente, 1);
+    await ambiente.casos.publicarDisponibilidade([H10, H11]);
+
+    const resultados = await Promise.allSettled([
+      ambiente.casos.reservarAula(aluno.id, H10),
+      ambiente.casos.reservarAula(aluno.id, H11),
+    ]);
+
+    const recusadas = resultados.filter((r) => r.status === 'rejected');
+    expect(recusadas).toHaveLength(1);
+    expect(recusadas[0]?.reason).toBeInstanceOf(SaldoInsuficiente);
+    // A reserva recusada não deixa aula gravada: 1 crédito, 1 aula.
+    expect(await ambiente.casos.consultarAgenda('2026-11-20')).toHaveLength(1);
+    expect((await ambiente.repositorios.pacotes.buscarPorAluno(aluno.id))?.saldo).toBe(0);
+  });
+
+  it('dois cancelamentos simultâneos da mesma aula devolvem o crédito uma vez só', async () => {
+    const ambiente = criarAmbiente();
+    const aluno = await alunoComPacote(ambiente, 1);
+    await ambiente.casos.publicarDisponibilidade([H10]);
+    const { aula } = await ambiente.casos.reservarAula(aluno.id, H10);
+
+    const resultados = await Promise.allSettled([
+      ambiente.casos.cancelarAula(aula.id),
+      ambiente.casos.cancelarAula(aula.id),
+    ]);
+
+    const recusados = resultados.filter((r) => r.status === 'rejected');
+    expect(recusados).toHaveLength(1);
+    expect(recusados[0]?.reason).toBeInstanceOf(AulaJaCancelada);
+    expect((await ambiente.repositorios.pacotes.buscarPorAluno(aluno.id))?.saldo).toBe(1);
+  });
+
+  it('dois pacotes registrados ao mesmo tempo somam os dois', async () => {
+    const ambiente = criarAmbiente();
+    const aluno = await criarAluno(ambiente, 'Ana');
+
+    await Promise.all([
+      ambiente.casos.registrarPacote(aluno.id, 4),
+      ambiente.casos.registrarPacote(aluno.id, 6),
+    ]);
+
+    expect((await ambiente.repositorios.pacotes.buscarPorAluno(aluno.id))?.saldo).toBe(10);
   });
 });
 

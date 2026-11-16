@@ -13,11 +13,13 @@ npm run smoke
 ```
 
 O script é [`k6/smoke.js`](../k6/smoke.js) e roda o k6 pelo Docker (`grafana/k6`), sem
-instalar nada. Variáveis opcionais: `BASE_URL` (padrão `http://host.docker.internal:3000`
+instalar nada. Variáveis obrigatórias: `ADMIN_EMAIL` e `ADMIN_SENHA`, de um administrador criado com
+`npm run admin:criar`. Opcionais: `BASE_URL` (padrão `http://host.docker.internal:3000`
 no `npm run smoke`) e `ITERACOES` (padrão 200).
 
-Cenário: 5 usuários virtuais compartilham 200 iterações. O `setup()` cadastra um aluno
-com 200 aulas de saldo e publica 200 horários em hora cheia; cada iteração usa um horário
+Cenário: 5 usuários virtuais compartilham 200 iterações. O `setup()` entra como administrador, cadastra
+um instrutor próprio do teste, e com ele cadastra um aluno com conta e 200 aulas de saldo, publica 200 horários em hora cheia e
+abre uma sessão do aluno (o login fica fora da medição); cada iteração usa um horário
 próprio, então não há disputa por horário (R3) e todo `201` é esperado.
 
 Thresholds (o k6 sai com erro se algum falhar):
@@ -29,6 +31,10 @@ Thresholds (o k6 sai com erro se algum falhar):
 | `http_req_failed` | < 1% | SLO 1 |
 
 ## Resultado medido
+
+> **Medição da versão 0.1.0, anterior à autenticação.** Desde a 0.3.0 cada requisição
+> confere a sessão no banco (uma consulta a mais) e o script faz login no `setup()`.
+> O script atualizado ainda não foi executado: rode `npm run smoke` e substitua os números.
 
 Números copiados da saída real do `npm run smoke` (API e Postgres via
 `docker compose up --build` em clone limpo; nenhum valor é estimado):

@@ -29,7 +29,8 @@ medido ficar longe de 300 ms, esta meta é revista com base no número, não no 
 
 ## Como medir
 
-Ambos saem da métrica `http_request_duration_seconds` exposta em `GET /metrics`
+Ambos saem da métrica `http_request_duration_seconds` exposta em `GET /metrics`, na porta
+interna `METRICS_PORT` (padrão 9100), que só a rede do Compose alcança
 (rótulos `method`, `route` e `status_code`).
 
 Disponibilidade (SLO 1), sobre as duas rotas do escopo:

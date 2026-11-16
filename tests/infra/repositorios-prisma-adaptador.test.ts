@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
-import { HorarioOcupado } from '../../src/domain/erros.js';
+import { EmailJaCadastrado, HorarioOcupado, SaldoInsuficiente } from '../../src/domain/erros.js';
 import { criarRepositoriosPrisma } from '../../src/infra/prisma/repositorios-prisma.js';
 
 /**
@@ -14,10 +14,14 @@ const AULA = { id: 'a1', alunoId: 'ana', inicio: H10, fim: new Date('2026-11-20T
 
 function criarDbFalso() {
   const db = {
-    aluno: { upsert: vi.fn(), findUnique: vi.fn() },
-    pacote: { upsert: vi.fn(), findUnique: vi.fn() },
+    aluno: { upsert: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
+    usuario: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
+    sessao: { create: vi.fn(), findUnique: vi.fn(), deleteMany: vi.fn() },
+    pacote: { upsert: vi.fn(), updateManyAndReturn: vi.fn(), findUnique: vi.fn() },
     disponibilidade: { createMany: vi.fn(), findMany: vi.fn() },
-    aula: { upsert: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
+    aula: { upsert: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
+    // Como o Prisma: chama o trabalho com o client da transação e repassa o resultado.
+    $transaction: vi.fn(async (trabalho: (tx: unknown) => Promise<unknown>) => trabalho(db)),
   };
   return { db, repos: criarRepositoriosPrisma(db as unknown as PrismaClient) };
 }
@@ -32,6 +36,54 @@ describe('adaptador Prisma', () => {
     db.aula.upsert.mockRejectedValue(erroPrisma('P2002'));
 
     await expect(repos.aulas.salvar(AULA)).rejects.toBeInstanceOf(HorarioOcupado);
+  });
+
+  it('conta: traduz a violação do índice único do e-mail em EmailJaCadastrado e repassa o resto', async () => {
+    const { db, repos } = criarDbFalso();
+    const conta = { id: 'u1', email: 'ana@exemplo.com', senhaHash: 'h', papel: 'aluno', alunoId: 'ana' } as const;
+    const falha = erroPrisma('P2003');
+    db.usuario.create.mockRejectedValueOnce(erroPrisma('P2002')).mockRejectedValueOnce(falha);
+
+    await expect(repos.usuarios.criar(conta)).rejects.toBeInstanceOf(EmailJaCadastrado);
+    await expect(repos.usuarios.criar(conta)).rejects.toBe(falha);
+    expect(db.usuario.create).toHaveBeenCalledWith({ data: conta });
+  });
+
+  it('conta e sessão: devolvem undefined quando não há linha, e consultam com o filtro certo', async () => {
+    const { db, repos } = criarDbFalso();
+    db.usuario.findUnique.mockResolvedValue(null);
+    db.usuario.findMany.mockResolvedValue([]);
+    db.sessao.findUnique.mockResolvedValue(null);
+    db.aluno.findMany.mockResolvedValue([{ id: 'ana', nome: 'Ana' }]);
+
+    expect(await repos.usuarios.buscarPorEmail('x@exemplo.com')).toBeUndefined();
+    expect(await repos.usuarios.listarPorPapel('aluno')).toEqual([]);
+    expect(await repos.sessoes.buscar('resumo')).toBeUndefined();
+    expect(await repos.alunos.listar()).toEqual([{ id: 'ana', nome: 'Ana' }]);
+
+    expect(db.usuario.findUnique).toHaveBeenCalledWith({ where: { email: 'x@exemplo.com' } });
+    expect(db.usuario.findMany).toHaveBeenCalledWith({ where: { papel: 'aluno' }, orderBy: { email: 'asc' } });
+    expect(db.sessao.findUnique).toHaveBeenCalledWith({ where: { tokenHash: 'resumo' } });
+    expect(db.aluno.findMany).toHaveBeenCalledWith({ orderBy: { nome: 'asc' } });
+  });
+
+  it('sessão: grava a linha e remove com deleteMany, que não lança se ela já não existe', async () => {
+    const { db, repos } = criarDbFalso();
+    const sessao = { tokenHash: 'resumo', usuarioId: 'u1', papel: 'aluno', alunoId: 'ana', expiraEm: H10 } as const;
+
+    await repos.sessoes.salvar(sessao);
+    await repos.sessoes.remover('resumo');
+
+    expect(db.sessao.create).toHaveBeenCalledWith({ data: sessao });
+    expect(db.sessao.deleteMany).toHaveBeenCalledWith({ where: { tokenHash: 'resumo' } });
+  });
+
+  it('sessão: remove as expiradas com um deleteMany por data e devolve a contagem', async () => {
+    const { db, repos } = criarDbFalso();
+    db.sessao.deleteMany.mockResolvedValue({ count: 3 });
+
+    expect(await repos.sessoes.removerExpiradas(H10)).toBe(3);
+    expect(db.sessao.deleteMany).toHaveBeenCalledWith({ where: { expiraEm: { lte: H10 } } });
   });
 
   it('repassa qualquer outro erro sem disfarçá-lo de horário ocupado', async () => {
@@ -65,22 +117,79 @@ describe('adaptador Prisma', () => {
     expect(await repos.aulas.buscarPorId('a1')).toEqual(AULA);
   });
 
-  it('aluno e pacote usam upsert, então salvar de novo atualiza', async () => {
+  it('aluno usa upsert, então salvar de novo atualiza', async () => {
     const { db, repos } = criarDbFalso();
 
     await repos.alunos.salvar({ id: 'ana', nome: 'Ana' });
-    await repos.pacotes.salvar({ alunoId: 'ana', saldo: 4 });
 
     expect(db.aluno.upsert).toHaveBeenCalledWith({
       where: { id: 'ana' },
       create: { id: 'ana', nome: 'Ana' },
       update: { nome: 'Ana' },
     });
+  });
+
+  it('creditar deixa a soma para o banco (increment), sem ler o saldo antes', async () => {
+    const { db, repos } = criarDbFalso();
+    db.pacote.upsert.mockResolvedValue({ alunoId: 'ana', saldo: 7 });
+
+    expect(await repos.pacotes.creditar('ana', 4)).toEqual({ alunoId: 'ana', saldo: 7 });
+
     expect(db.pacote.upsert).toHaveBeenCalledWith({
       where: { alunoId: 'ana' },
       create: { alunoId: 'ana', saldo: 4 },
-      update: { saldo: 4 },
+      update: { saldo: { increment: 4 } },
     });
+    expect(db.pacote.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('debitar condiciona o decremento a saldo >= 1 na mesma instrução', async () => {
+    const { db, repos } = criarDbFalso();
+    db.pacote.updateManyAndReturn.mockResolvedValue([{ alunoId: 'ana', saldo: 2 }]);
+
+    expect(await repos.pacotes.debitar('ana')).toEqual({ alunoId: 'ana', saldo: 2 });
+
+    expect(db.pacote.updateManyAndReturn).toHaveBeenCalledWith({
+      where: { alunoId: 'ana', saldo: { gte: 1 } },
+      data: { saldo: { decrement: 1 } },
+    });
+  });
+
+  it('debitar lança SaldoInsuficiente quando nenhuma linha foi atualizada (R5)', async () => {
+    const { db, repos } = criarDbFalso();
+    db.pacote.updateManyAndReturn.mockResolvedValue([]);
+
+    await expect(repos.pacotes.debitar('ana')).rejects.toBeInstanceOf(SaldoInsuficiente);
+  });
+
+  it('cancelar só atinge a aula ainda reservada e diz se mudou alguma linha', async () => {
+    const { db, repos } = criarDbFalso();
+    db.aula.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+
+    expect(await repos.aulas.cancelar('a1')).toBe(true);
+    expect(await repos.aulas.cancelar('a1')).toBe(false);
+
+    expect(db.aula.updateMany).toHaveBeenCalledWith({
+      where: { id: 'a1', status: 'reservada' },
+      data: { status: 'cancelada' },
+    });
+  });
+
+  it('emTransacao roda o trabalho dentro de $transaction e devolve o resultado dele', async () => {
+    const { db, repos } = criarDbFalso();
+    db.aula.updateMany.mockResolvedValue({ count: 1 });
+
+    const resultado = await repos.emTransacao((tx) => tx.aulas.cancelar('a1'));
+
+    expect(resultado).toBe(true);
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('emTransacao repassa o erro do trabalho, para o Prisma desfazer a transação', async () => {
+    const { repos } = criarDbFalso();
+    const falha = new Error('falha no meio');
+
+    await expect(repos.emTransacao(() => Promise.reject(falha))).rejects.toBe(falha);
   });
 
   it('disponibilidade: publica ignorando duplicados e lista como datas em [de, ate)', async () => {
