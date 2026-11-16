@@ -66,6 +66,8 @@ Antes de dizer que uma tarefa terminou, rode lint, typecheck e test:coverage. Tu
   se é pública (`security: []`).
 - Nenhuma credencial de conta em `.env`, Compose ou imagem: o administrador nasce de
   `npm run admin:criar` (`src/criar-admin.ts`), rodado no servidor.
+- `/metrics` fica numa segunda aplicação Fastify, na porta interna `METRICS_PORT`, que o
+  Compose não publica (ADR 0004). Não o devolva para a porta pública.
 - Concorrência: nunca "ler, calcular e gravar" um valor disputado. A condição vai no
   próprio comando de gravação (como `debitar` e `cancelar`) e gravações que precisam valer
   juntas vão em `emTransacao` (ADR 0002).
