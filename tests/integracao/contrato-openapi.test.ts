@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { agendaRoutes } from '../../src/routes/agenda.js';
 import { autenticacaoRoutes } from '../../src/routes/autenticacao.js';
+import { contaRoutes } from '../../src/routes/conta.js';
 import { criarGuarda } from '../../src/routes/autorizacao.js';
 import { criarAmbiente, criarApp } from '../helpers.js';
 
@@ -96,9 +97,9 @@ describe('aderência da API ao docs/openapi.yaml', () => {
   });
   afterEach(() => app.close());
 
-  it('o contrato tem as 11 operações da API', () => {
+  it('o contrato tem as 16 operações da API', () => {
     // Sem isto, um contrato vazio faria os testes abaixo passarem sem conferir nada.
-    expect(operacoes).toHaveLength(11);
+    expect(operacoes).toHaveLength(16);
   });
 
   it('toda operação documentada existe como rota da aplicação', async () => {
@@ -107,6 +108,26 @@ describe('aderência da API ao docs/openapi.yaml', () => {
       const existe = app.hasRoute({ method: metodo, url: urlDoFastify(caminho) });
       expect(existe, `${metodo} ${caminho} não existe na aplicação`).toBe(true);
     }
+  });
+
+  it('toda rota da aplicação está documentada (fora as de saúde)', async () => {
+    const registradas: string[] = [];
+    const rotas = Fastify();
+    rotas.addHook('onRoute', (rota) => {
+      for (const metodo of [rota.method].flat()) {
+        if (metodo !== 'HEAD') registradas.push(`${metodo} ${rota.url}`);
+      }
+    });
+    const { casos, autenticacao } = criarAmbiente();
+    const guarda = criarGuarda(autenticacao);
+    await rotas.register(autenticacaoRoutes(autenticacao, guarda));
+    await rotas.register(contaRoutes(autenticacao, guarda));
+    await rotas.register(agendaRoutes(casos, guarda));
+    await rotas.ready();
+
+    const documentadas = operacoes.map(({ caminho, metodo }) => `${metodo} ${urlDoFastify(caminho)}`);
+    expect(registradas.sort()).toEqual(documentadas.sort());
+    await rotas.close();
   });
 
   it('a entrada que cada rota valida (corpo, parâmetros e query) é a do contrato', async () => {
@@ -119,6 +140,7 @@ describe('aderência da API ao docs/openapi.yaml', () => {
     const { casos, autenticacao } = criarAmbiente();
     const guarda = criarGuarda(autenticacao);
     await rotas.register(autenticacaoRoutes(autenticacao, guarda));
+    await rotas.register(contaRoutes(autenticacao, guarda));
     await rotas.register(agendaRoutes(casos, guarda));
     await rotas.ready();
 
@@ -251,13 +273,49 @@ describe('aderência da API ao docs/openapi.yaml', () => {
       await chamar('/agenda', 'GET', '/agenda?data=2026-11-20', { headers: aluno }),
       await chamar('/agenda', 'GET', '/agenda?data=2026-11-20'),
       await chamar('/alunos', 'POST', '/alunos', { payload: { nome: '' } }),
-      await chamar('/sessoes/atual', 'DELETE', '/sessoes/atual', { headers: aluno }),
+      await chamar('/minhas-aulas', 'GET', '/minhas-aulas', { headers: aluno }),
+      await chamar('/minhas-aulas', 'GET', '/minhas-aulas', { headers: instrutor }),
+      await chamar('/conta/senha', 'POST', '/conta/senha', {
+        headers: aluno,
+        payload: { senhaAtual: 'chute', novaSenha: 'senha-nova-da-ana' },
+      }),
+      await chamar('/alunos/{id}/codigo-de-redefinicao', 'POST', '/alunos/fantasma/codigo-de-redefinicao', {
+        headers: instrutor,
+      }),
+      await chamar('/senha/redefinicao', 'POST', '/senha/redefinicao', {
+        payload: { email: ana.email, codigo: 'AAAA-AAAA', novaSenha: 'senha-nova-da-ana' },
+      }),
     ];
+    const gerado = await chamar('/alunos/{id}/codigo-de-redefinicao', 'POST', `/alunos/${id}/codigo-de-redefinicao`, {
+      headers: instrutor,
+    });
+    const { codigo } = gerado.resposta.json<{ codigo: string }>();
+    observadas.push(
+      gerado,
+      await chamar('/senha/redefinicao', 'POST', '/senha/redefinicao', {
+        payload: { email: ana.email, codigo, novaSenha: 'senha-nova-da-ana' },
+      }),
+    );
+    const novoLogin = await app.inject({
+      method: 'POST',
+      url: '/sessoes',
+      payload: { email: ana.email, senha: 'senha-nova-da-ana' },
+    });
+    const novaSessao = { authorization: `Bearer ${novoLogin.json<{ token: string }>().token}` };
+    observadas.push(
+      await chamar('/conta/senha', 'POST', '/conta/senha', {
+        headers: novaSessao,
+        payload: { senhaAtual: 'senha-nova-da-ana', novaSenha: 'mais-uma-senha' },
+      }),
+      await chamar('/conta', 'DELETE', '/conta', { headers: novaSessao, payload: { senha: 'chute' } }),
+      await chamar('/conta', 'DELETE', '/conta', { headers: novaSessao, payload: { senha: 'mais-uma-senha' } }),
+      await chamar('/sessoes/atual', 'DELETE', '/sessoes/atual', { headers: instrutor }),
+    );
 
     // Sem isto o teste passaria mesmo que o fluxo falhasse: confirma cada caminho exercitado.
     expect(observadas.map((o) => o.resposta.statusCode)).toEqual([
       201, 409, 201, 401, 201, 409, 403, 429, 200, 200, 204, 200, 201, 409, 422, 200, 200, 409, 404, 404, 400, 403,
-      401, 400, 204,
+      401, 400, 200, 403, 403, 404, 400, 201, 204, 204, 403, 204, 204,
     ]);
 
     for (const { caminho, metodo, resposta } of observadas) {

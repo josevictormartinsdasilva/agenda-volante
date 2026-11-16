@@ -6,6 +6,7 @@ import type { Config } from './config.js';
 import { instrumentar } from './observabilidade/metricas.js';
 import { agendaRoutes } from './routes/agenda.js';
 import { autenticacaoRoutes } from './routes/autenticacao.js';
+import { contaRoutes } from './routes/conta.js';
 import { criarGuarda } from './routes/autorizacao.js';
 import { tratarErro } from './routes/erros-http.js';
 import { healthRoutes } from './routes/health.js';
@@ -42,6 +43,7 @@ export function buildApp(
   app.decorateRequest('identidade', null);
   const guarda = criarGuarda(autenticacao);
   app.register(autenticacaoRoutes(autenticacao, guarda));
+  app.register(contaRoutes(autenticacao, guarda));
   app.register(agendaRoutes(casos, guarda));
   return app;
 }

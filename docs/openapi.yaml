@@ -47,6 +47,8 @@ tags:
     description: Login e logout
   - name: Administração
     description: Contas de instrutor, criadas pelo administrador
+  - name: Conta
+    description: A própria conta - senha, redefinição e exclusão
 
 paths:
   /aulas:
@@ -380,6 +382,184 @@ paths:
               example:
                 erro: Já existe uma conta com esse e-mail
 
+  /conta/senha:
+    post:
+      tags: [Conta]
+      operationId: trocarSenha
+      summary: Troca a própria senha
+      description: |
+        Qualquer conta logada troca a própria senha, confirmando a atual. Erros da senha
+        atual contam no mesmo limite do login. As outras sessões da conta caem; a usada
+        nesta chamada continua valendo.
+      security:
+        - tokenDeSessao: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrocaDeSenhaPedido'
+            example:
+              senhaAtual: senha-antiga
+              novaSenha: uma-senha-nova
+      responses:
+        '204':
+          description: Senha trocada
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          description: Senha atual incorreta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                erro: Senha incorreta
+        '429':
+          $ref: '#/components/responses/MuitasTentativas'
+
+  /conta:
+    delete:
+      tags: [Conta]
+      operationId: excluirConta
+      summary: Exclui a própria conta (aluno)
+      description: |
+        O aluno confirma a senha e a conta é excluída: e-mail, senha e sessões somem, o nome
+        vira "Aluno removido" e as aulas futuras são canceladas (o horário volta a ficar
+        livre). As aulas que já aconteceram ficam no histórico do instrutor, sem o nome.
+        Instrutor e administrador recebem `403`.
+      security:
+        - tokenDeSessao: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExclusaoDeContaPedido'
+            example:
+              senha: uma-senha-longa
+      responses:
+        '204':
+          description: Conta excluída
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          description: Senha incorreta, ou a conta não é de aluno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                erro: Senha incorreta
+        '429':
+          $ref: '#/components/responses/MuitasTentativas'
+
+  /minhas-aulas:
+    get:
+      tags: [Aulas]
+      operationId: minhasAulas
+      summary: Aulas e saldo do aluno logado
+      description: Todas as aulas do aluno (reservadas e canceladas), em ordem de horário, e o saldo do pacote.
+      security:
+        - tokenDeSessao: []
+      responses:
+        '200':
+          description: Aulas e saldo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MinhasAulasResposta'
+              example:
+                saldo: 9
+                aulas:
+                  - id: 5e0b9a40-6f1d-4c53-8d7a-2a9f1b3c4d55
+                    alunoId: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
+                    inicio: '2026-11-20T13:00:00.000Z'
+                    fim: '2026-11-20T13:50:00.000Z'
+                    status: reservada
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/AcessoNegado'
+
+  /alunos/{id}/codigo-de-redefinicao:
+    post:
+      tags: [Alunos]
+      operationId: gerarCodigoDeRedefinicao
+      summary: Gera código para o aluno redefinir a senha (instrutor)
+      description: |
+        Para o aluno que esqueceu a senha. O instrutor repassa o código ao aluno (por
+        WhatsApp, por exemplo), que o usa em `POST /senha/redefinicao`. O código serve uma
+        vez, vale `CODIGO_REDEFINICAO_MINUTOS` (padrão 60) e um código novo invalida o
+        anterior. O instrutor nunca conhece a senha.
+      parameters:
+        - $ref: '#/components/parameters/AlunoId'
+      security:
+        - tokenDeSessao: []
+      responses:
+        '201':
+          description: Código gerado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodigoDeRedefinicao'
+              example:
+                codigo: K7QM-3XRA
+                expiraEm: '2026-11-16T13:00:00.000Z'
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/AcessoNegado'
+        '404':
+          description: Aluno não encontrado, ou sem conta de acesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                erro: Aluno não encontrado
+
+  /senha/redefinicao:
+    post:
+      tags: [Sessões]
+      operationId: redefinirSenha
+      summary: Redefine a senha com o código
+      description: |
+        Pública: quem esqueceu a senha não está logado. O código pode ser digitado com ou
+        sem hífen e em qualquer caixa. Depois da troca, todas as sessões da conta caem.
+        E-mail sem conta, código errado, usado ou vencido: todos respondem `400`. As
+        tentativas contam num limite próprio (5 por e-mail e 20 por IP a cada 15 minutos).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedefinicaoPedido'
+            example:
+              email: ana@exemplo.com
+              codigo: K7QM-3XRA
+              novaSenha: uma-senha-nova
+      responses:
+        '204':
+          description: Senha redefinida
+        '400':
+          description: Corpo inválido, ou código inválido ou expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                erro: Código inválido ou expirado
+        '429':
+          $ref: '#/components/responses/MuitasTentativas'
+
   /sessoes:
     post:
       tags: [Sessões]
@@ -426,19 +606,7 @@ paths:
               example:
                 erro: E-mail ou senha inválidos
         '429':
-          description: Tentativas demais para este e-mail ou deste IP
-          headers:
-            Retry-After:
-              description: Segundos até poder tentar de novo
-              schema:
-                type: integer
-                minimum: 1
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Erro'
-              example:
-                erro: Muitas tentativas de login. Tente de novo em 15 minutos
+          $ref: '#/components/responses/MuitasTentativas'
 
   /sessoes/atual:
     delete:
@@ -552,6 +720,20 @@ components:
             $ref: '#/components/schemas/Erro'
           example:
             erro: Você não tem permissão para esta operação
+    MuitasTentativas:
+      description: Tentativas demais para este e-mail ou deste IP
+      headers:
+        Retry-After:
+          description: Segundos até poder tentar de novo
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          example:
+            erro: Muitas tentativas de login. Tente de novo em 15 minutos
     NaoEncontrado:
       description: Aluno ou aula não encontrados
       content:
@@ -626,6 +808,63 @@ components:
           type: string
         email:
           type: string
+    TrocaDeSenhaPedido:
+      type: object
+      required: [senhaAtual, novaSenha]
+      properties:
+        senhaAtual:
+          type: string
+          minLength: 1
+          maxLength: 128
+        novaSenha:
+          type: string
+          minLength: 8
+          maxLength: 128
+    ExclusaoDeContaPedido:
+      type: object
+      required: [senha]
+      properties:
+        senha:
+          type: string
+          minLength: 1
+          maxLength: 128
+    RedefinicaoPedido:
+      type: object
+      required: [email, codigo, novaSenha]
+      properties:
+        email:
+          type: string
+          minLength: 1
+          maxLength: 254
+        codigo:
+          type: string
+          minLength: 1
+          maxLength: 20
+        novaSenha:
+          type: string
+          minLength: 8
+          maxLength: 128
+    CodigoDeRedefinicao:
+      type: object
+      required: [codigo, expiraEm]
+      properties:
+        codigo:
+          type: string
+          description: 8 símbolos em dois grupos, sem 0, O, 1, I e L
+        expiraEm:
+          type: string
+          format: date-time
+    MinhasAulasResposta:
+      type: object
+      required: [saldo, aulas]
+      properties:
+        saldo:
+          type: integer
+          minimum: 0
+        aulas:
+          type: array
+          items:
+            $ref: '#/components/schemas/Aula'
     LoginPedido:
       type: object
       required: [email, senha]

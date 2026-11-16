@@ -7,7 +7,7 @@ import { criarTerminal } from './cli/terminal.js';
 import { carregarConfig } from './config.js';
 import { criarRepositoriosPrisma } from './infra/prisma/repositorios-prisma.js';
 import { conferirSenha, gerarHashDaSenha } from './seguranca/senha.js';
-import { gerarToken, resumirToken } from './seguranca/token.js';
+import { gerarCodigoCurto, gerarToken, resumirToken } from './seguranca/token.js';
 
 /**
  * Comando para criar uma conta de administrador (a primeira, ou outra):
@@ -25,8 +25,9 @@ const prisma = new PrismaClient({ datasourceUrl: config.databaseUrl });
 const autenticacao = criarAutenticacao({
   repositorios: criarRepositoriosPrisma(prisma),
   senhas: { gerarHash: gerarHashDaSenha, conferir: conferirSenha },
-  tokens: { gerar: gerarToken, resumir: resumirToken },
+  tokens: { gerar: gerarToken, resumir: resumirToken, gerarCodigo: gerarCodigoCurto },
   sessaoDuracaoHoras: config.sessaoDuracaoHoras,
+  codigoDuracaoMinutos: config.codigoRedefinicaoMinutos,
   limites: criarLimitesDeLogin(config.login, () => new Date()), // não há login aqui
   agora: () => new Date(),
   gerarId: randomUUID,

@@ -4,13 +4,22 @@ import type {
   AlunoRepository,
   Armazenamento,
   AulaRepository,
+  CodigoDeRedefinicaoRepository,
   DisponibilidadeRepository,
   PacoteRepository,
   Repositorios,
   SessaoRepository,
   UsuarioRepository,
 } from '../../domain/repositorios.js';
-import type { Aluno, Aula, Pacote, Papel, Sessao, Usuario } from '../../domain/tipos.js';
+import type {
+  Aluno,
+  Aula,
+  CodigoDeRedefinicao,
+  Pacote,
+  Papel,
+  Sessao,
+  Usuario,
+} from '../../domain/tipos.js';
 
 /** Violação de índice único: o parcial de R3 em Aula.inicio ou o do e-mail em Usuario. */
 const VIOLACAO_DE_UNICIDADE = 'P2002';
@@ -66,8 +75,47 @@ class UsuarioPrisma implements UsuarioRepository {
     return usuario ?? undefined;
   }
 
+  async buscarPorId(id: string): Promise<Usuario | undefined> {
+    const usuario = await this.db.usuario.findUnique({ where: { id } });
+    return usuario ?? undefined;
+  }
+
+  async buscarPorAluno(alunoId: string): Promise<Usuario | undefined> {
+    const usuario = await this.db.usuario.findUnique({ where: { alunoId } });
+    return usuario ?? undefined;
+  }
+
   async listarPorPapel(papel: Papel): Promise<Usuario[]> {
     return this.db.usuario.findMany({ where: { papel }, orderBy: { email: 'asc' } });
+  }
+
+  async trocarSenha(id: string, senhaHash: string): Promise<void> {
+    await this.db.usuario.update({ where: { id }, data: { senhaHash } });
+  }
+
+  async remover(id: string): Promise<void> {
+    // Sessões e código de redefinição saem junto (onDelete: Cascade no schema).
+    await this.db.usuario.delete({ where: { id } });
+  }
+}
+
+class CodigoPrisma implements CodigoDeRedefinicaoRepository {
+  constructor(private readonly db: Db) {}
+
+  async salvar(codigo: CodigoDeRedefinicao): Promise<void> {
+    const { usuarioId, ...dados } = codigo;
+    await this.db.codigoDeRedefinicao.upsert({ where: { usuarioId }, create: codigo, update: dados });
+  }
+
+  async consumir(usuarioId: string, codigoHash: string, agora: Date): Promise<boolean> {
+    const { count } = await this.db.codigoDeRedefinicao.deleteMany({
+      where: { usuarioId, codigoHash, expiraEm: { gt: agora } },
+    });
+    return count === 1;
+  }
+
+  async remover(usuarioId: string): Promise<void> {
+    await this.db.codigoDeRedefinicao.deleteMany({ where: { usuarioId } });
   }
 }
 
@@ -86,6 +134,16 @@ class SessaoPrisma implements SessaoRepository {
   async remover(tokenHash: string): Promise<void> {
     // `deleteMany` não lança quando a sessão já não existe (logout repetido).
     await this.db.sessao.deleteMany({ where: { tokenHash } });
+  }
+
+  async removerDoUsuario(usuarioId: string, excetoTokenHash?: string): Promise<number> {
+    const { count } = await this.db.sessao.deleteMany({
+      where:
+        excetoTokenHash === undefined
+          ? { usuarioId }
+          : { usuarioId, tokenHash: { not: excetoTokenHash } },
+    });
+    return count;
   }
 
   async removerExpiradas(ate: Date): Promise<number> {
@@ -177,6 +235,10 @@ class AulaPrisma implements AulaRepository {
       orderBy: { inicio: 'asc' },
     });
   }
+
+  async listarDoAluno(alunoId: string): Promise<Aula[]> {
+    return this.db.aula.findMany({ where: { alunoId }, orderBy: { inicio: 'asc' } });
+  }
 }
 
 function montar(db: Db): Repositorios {
@@ -184,6 +246,7 @@ function montar(db: Db): Repositorios {
     alunos: new AlunoPrisma(db),
     usuarios: new UsuarioPrisma(db),
     sessoes: new SessaoPrisma(db),
+    codigos: new CodigoPrisma(db),
     pacotes: new PacotePrisma(db),
     disponibilidade: new DisponibilidadePrisma(db),
     aulas: new AulaPrisma(db),

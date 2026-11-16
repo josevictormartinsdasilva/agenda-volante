@@ -11,7 +11,7 @@ import { CancelamentoComAntecedencia } from './domain/politica-cancelamento.js';
 import { criarRepositoriosEmMemoria } from './infra/memoria/repositorios-em-memoria.js';
 import { criarRepositoriosPrisma } from './infra/prisma/repositorios-prisma.js';
 import { conferirSenha, gerarHashDaSenha } from './seguranca/senha.js';
-import { gerarToken, resumirToken } from './seguranca/token.js';
+import { gerarCodigoCurto, gerarToken, resumirToken } from './seguranca/token.js';
 import { repetirPeriodicamente } from './tarefas.js';
 
 const UMA_HORA_MS = 3_600_000;
@@ -37,8 +37,9 @@ const casos = criarCasosDeUso({
 const autenticacao = criarAutenticacao({
   repositorios,
   senhas: { gerarHash: gerarHashDaSenha, conferir: conferirSenha },
-  tokens: { gerar: gerarToken, resumir: resumirToken },
+  tokens: { gerar: gerarToken, resumir: resumirToken, gerarCodigo: gerarCodigoCurto },
   sessaoDuracaoHoras: config.sessaoDuracaoHoras,
+  codigoDuracaoMinutos: config.codigoRedefinicaoMinutos,
   limites: criarLimitesDeLogin(config.login, () => new Date()),
   agora: () => new Date(),
   gerarId: randomUUID,

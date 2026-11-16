@@ -20,6 +20,8 @@ export interface Config {
    * conta vem do ambiente: o administrador nasce do comando `criar-admin` (ADR 0003).
    */
   sessaoDuracaoHoras: number;
+  /** Por quantos minutos vale o código de redefinição de senha que o instrutor gera. */
+  codigoRedefinicaoMinutos: number;
   /** Porta interna do `/metrics`, separada da API e não publicada no Compose. */
   metricsPort: number;
   /**
@@ -72,6 +74,7 @@ export function carregarConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cancelamentoAntecedenciaHoras: inteiro('CANCELAMENTO_ANTECEDENCIA_HORAS', 48, env),
     duracaoAulaMinutos: inteiro('DURACAO_AULA_MINUTOS', 50, env),
     sessaoDuracaoHoras: inteiro('SESSAO_DURACAO_HORAS', 168, env),
+    codigoRedefinicaoMinutos: positivo('CODIGO_REDEFINICAO_MINUTOS', 60, env),
     metricsPort: inteiro('METRICS_PORT', 9100, env),
     trustProxy: booleano('TRUST_PROXY', false, env),
     login: {

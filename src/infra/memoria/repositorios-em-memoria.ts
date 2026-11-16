@@ -3,13 +3,22 @@ import type {
   AlunoRepository,
   Armazenamento,
   AulaRepository,
+  CodigoDeRedefinicaoRepository,
   DisponibilidadeRepository,
   PacoteRepository,
   Repositorios,
   SessaoRepository,
   UsuarioRepository,
 } from '../../domain/repositorios.js';
-import type { Aluno, Aula, Pacote, Papel, Sessao, Usuario } from '../../domain/tipos.js';
+import type {
+  Aluno,
+  Aula,
+  CodigoDeRedefinicao,
+  Pacote,
+  Papel,
+  Sessao,
+  Usuario,
+} from '../../domain/tipos.js';
 
 /**
  * Tabela em memória: um Map com "retrato", que copia o estado e devolve a função que o
@@ -62,8 +71,47 @@ class UsuarioEmMemoria implements UsuarioRepository {
     return this.tabela.linhas.get(email);
   }
 
+  async buscarPorId(id: string): Promise<Usuario | undefined> {
+    return [...this.tabela.linhas.values()].find((u) => u.id === id);
+  }
+
+  async buscarPorAluno(alunoId: string): Promise<Usuario | undefined> {
+    return [...this.tabela.linhas.values()].find((u) => u.alunoId === alunoId);
+  }
+
   async listarPorPapel(papel: Papel): Promise<Usuario[]> {
     return [...this.tabela.linhas.values()].filter((u) => u.papel === papel);
+  }
+
+  async trocarSenha(id: string, senhaHash: string): Promise<void> {
+    const usuario = await this.buscarPorId(id);
+    if (usuario) this.tabela.linhas.set(usuario.email, { ...usuario, senhaHash });
+  }
+
+  async remover(id: string): Promise<void> {
+    const usuario = await this.buscarPorId(id);
+    if (usuario) this.tabela.linhas.delete(usuario.email);
+  }
+}
+
+class CodigoEmMemoria implements CodigoDeRedefinicaoRepository {
+  /** Chave: id da conta (um código por conta). */
+  readonly tabela = new Tabela<CodigoDeRedefinicao>();
+
+  async salvar(codigo: CodigoDeRedefinicao): Promise<void> {
+    this.tabela.linhas.set(codigo.usuarioId, codigo);
+  }
+
+  async consumir(usuarioId: string, codigoHash: string, agora: Date): Promise<boolean> {
+    const codigo = this.tabela.linhas.get(usuarioId);
+    if (!codigo || codigo.codigoHash !== codigoHash) return false;
+    if (codigo.expiraEm.getTime() <= agora.getTime()) return false;
+    this.tabela.linhas.delete(usuarioId);
+    return true;
+  }
+
+  async remover(usuarioId: string): Promise<void> {
+    this.tabela.linhas.delete(usuarioId);
   }
 }
 
@@ -80,6 +128,17 @@ class SessaoEmMemoria implements SessaoRepository {
 
   async remover(tokenHash: string): Promise<void> {
     this.tabela.linhas.delete(tokenHash);
+  }
+
+  async removerDoUsuario(usuarioId: string, excetoTokenHash?: string): Promise<number> {
+    let removidas = 0;
+    for (const [tokenHash, sessao] of this.tabela.linhas) {
+      if (sessao.usuarioId === usuarioId && tokenHash !== excetoTokenHash) {
+        this.tabela.linhas.delete(tokenHash);
+        removidas++;
+      }
+    }
+    return removidas;
   }
 
   async removerExpiradas(ate: Date): Promise<number> {
@@ -163,25 +222,33 @@ class AulaEmMemoria implements AulaRepository {
       (a) => a.inicio.getTime() >= de.getTime() && a.inicio.getTime() < ate.getTime(),
     );
   }
+
+  async listarDoAluno(alunoId: string): Promise<Aula[]> {
+    return [...this.tabela.linhas.values()]
+      .filter((a) => a.alunoId === alunoId)
+      .sort((a, b) => a.inicio.getTime() - b.inicio.getTime());
+  }
 }
 
 export function criarRepositoriosEmMemoria(): Armazenamento {
   const alunos = new AlunoEmMemoria();
   const usuarios = new UsuarioEmMemoria();
   const sessoes = new SessaoEmMemoria();
+  const codigos = new CodigoEmMemoria();
   const pacotes = new PacoteEmMemoria();
   const aulas = new AulaEmMemoria();
   const repos: Repositorios = {
     alunos,
     usuarios,
     sessoes,
+    codigos,
     pacotes,
     disponibilidade: new DisponibilidadeEmMemoria(),
     aulas,
   };
   // O que uma transação que falha desfaz. A disponibilidade fica de fora: nenhuma
   // transação a grava hoje.
-  const tabelas = [alunos.tabela, usuarios.tabela, sessoes.tabela, pacotes.tabela, aulas.tabela];
+  const tabelas = [alunos, usuarios, sessoes, codigos, pacotes, aulas].map((r) => r.tabela);
 
   // Uma transação por vez: cada uma espera a anterior terminar. Assim o retrato tirado no
   // início não apaga, ao ser restaurado, o que outra transação gravou no meio.

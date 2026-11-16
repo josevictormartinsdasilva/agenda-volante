@@ -30,6 +30,8 @@ export interface CasosDeUso {
   consultarHorariosLivres(data: string): Promise<Date[]>;
   reservarAula(alunoId: string, inicio: Date): Promise<{ aula: Aula; pacote: Pacote }>;
   consultarAgenda(data: string): Promise<Aula[]>;
+  /** As aulas do aluno (qualquer status, em ordem de início) e o saldo do pacote. */
+  aulasDoAluno(alunoId: string): Promise<{ saldo: number; aulas: Aula[] }>;
   /**
    * Com `solicitante`, só cancela se a aula é desse aluno; a de outro aluno responde
    * "não encontrada", para não revelar que ela existe. Sem ele (instrutor), cancela qualquer uma.
@@ -121,6 +123,14 @@ export function criarCasosDeUso(dep: Dependencias): CasosDeUso {
         await tx.aulas.salvar(aula);
         return { aula, pacote: await tx.pacotes.debitar(alunoId) };
       });
+    },
+
+    async aulasDoAluno(alunoId) {
+      const [pacote, aulas] = await Promise.all([
+        pacoteDoAluno(alunoId),
+        repos.aulas.listarDoAluno(alunoId),
+      ]);
+      return { saldo: pacote.saldo, aulas };
     },
 
     async consultarAgenda(data) {

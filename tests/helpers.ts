@@ -3,9 +3,10 @@ import { criarAutenticacao } from '../src/application/autenticacao.js';
 import { criarCasosDeUso } from '../src/application/casos-de-uso.js';
 import { criarLimitesDeLogin } from '../src/application/limite-de-tentativas.js';
 import { CancelamentoComAntecedencia } from '../src/domain/politica-cancelamento.js';
+import type { EnvioDeCodigo } from '../src/application/autenticacao.js';
 import type { Aluno } from '../src/domain/tipos.js';
 import { criarRepositoriosEmMemoria } from '../src/infra/memoria/repositorios-em-memoria.js';
-import { gerarToken, resumirToken } from '../src/seguranca/token.js';
+import { gerarCodigoCurto, gerarToken, resumirToken } from '../src/seguranca/token.js';
 
 /**
  * Hash de senha de mentira, instantâneo: os testes de fluxo não precisam pagar o custo do
@@ -16,8 +17,14 @@ export const senhasDeTeste = {
   conferir: async (senha: string, hash: string) => hash === `hash-de-teste:${senha}`,
 };
 
-/** Monta os casos de uso com repositórios em memória, relógio controlável e ids previsíveis. */
-export function criarAmbiente(agoraInicial = new Date('2026-11-10T12:00:00.000Z')) {
+/**
+ * Monta os casos de uso com repositórios em memória, relógio controlável e ids previsíveis.
+ * `envioDeCodigo`: canal falso para testar a recuperação por e-mail (sem ele, não há canal).
+ */
+export function criarAmbiente(
+  agoraInicial = new Date('2026-11-10T12:00:00.000Z'),
+  envioDeCodigo?: EnvioDeCodigo,
+) {
   const relogio = { agora: agoraInicial };
   let sequencia = 0;
   const repositorios = criarRepositoriosEmMemoria();
@@ -33,8 +40,10 @@ export function criarAmbiente(agoraInicial = new Date('2026-11-10T12:00:00.000Z'
   const autenticacao = criarAutenticacao({
     repositorios,
     senhas: senhasDeTeste,
-    tokens: { gerar: gerarToken, resumir: resumirToken },
+    tokens: { gerar: gerarToken, resumir: resumirToken, gerarCodigo: gerarCodigoCurto },
     sessaoDuracaoHoras: 24,
+    codigoDuracaoMinutos: 60,
+    envioDeCodigo,
     limites: criarLimitesDeLogin(
       { maxTentativasPorEmail: 5, maxTentativasPorOrigem: 20, janelaMinutos: 15 },
       agora,

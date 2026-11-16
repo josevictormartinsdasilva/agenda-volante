@@ -74,6 +74,12 @@ describe('carregarConfig', () => {
     expect(() => carregarConfig({ LOGIN_JANELA_MINUTOS: '0' })).toThrow(/LOGIN_JANELA_MINUTOS inválida/);
   });
 
+  it('o código de redefinição vale 60 minutos por padrão', () => {
+    expect(carregarConfig({}).codigoRedefinicaoMinutos).toBe(60);
+    expect(carregarConfig({ CODIGO_REDEFINICAO_MINUTOS: '30' }).codigoRedefinicaoMinutos).toBe(30);
+    expect(() => carregarConfig({ CODIGO_REDEFINICAO_MINUTOS: '0' })).toThrow(/inválida/);
+  });
+
   it('nenhuma credencial de conta vem do ambiente', () => {
     const config = carregarConfig({ INSTRUTOR_EMAIL: 'x@exemplo.com', INSTRUTOR_SENHA: 'qualquer-senha' });
 
