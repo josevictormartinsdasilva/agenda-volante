@@ -1,14 +1,18 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  AcessoNegado,
   AlunoNaoEncontrado,
   AulaJaCancelada,
   AulaNaoEncontrada,
+  CredenciaisInvalidas,
   DataInvalida,
+  EmailJaCadastrado,
   ErroDeDominio,
   HorarioForaDaGrade,
   HorarioIndisponivel,
   HorarioNoPassado,
   HorarioOcupado,
+  NaoAutenticado,
   SaldoInsuficiente,
 } from '../domain/erros.js';
 
@@ -17,10 +21,14 @@ type ClasseDeErro = new (...args: never[]) => ErroDeDominio;
 /** Cada regra violada vira um status HTTP; o texto da mensagem nunca é inspecionado. */
 const STATUS_POR_ERRO: ReadonlyArray<readonly [ClasseDeErro, number]> = [
   [DataInvalida, 400],
+  [CredenciaisInvalidas, 401],
+  [NaoAutenticado, 401],
+  [AcessoNegado, 403],
   [AlunoNaoEncontrado, 404],
   [AulaNaoEncontrada, 404],
   [HorarioOcupado, 409],
   [AulaJaCancelada, 409],
+  [EmailJaCadastrado, 409],
   [HorarioForaDaGrade, 422],
   [HorarioNoPassado, 422],
   [HorarioIndisponivel, 422],

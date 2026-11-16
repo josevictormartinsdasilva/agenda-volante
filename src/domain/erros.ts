@@ -75,3 +75,30 @@ export class AulaNaoEncontrada extends ErroDeDominio {
     super('Aula não encontrada');
   }
 }
+
+export class EmailJaCadastrado extends ErroDeDominio {
+  constructor() {
+    super('Já existe uma conta com esse e-mail');
+  }
+}
+
+/** Mesma mensagem para e-mail desconhecido e senha errada: não revela quais e-mails existem. */
+export class CredenciaisInvalidas extends ErroDeDominio {
+  constructor() {
+    super('E-mail ou senha inválidos');
+  }
+}
+
+/** Sem token, token desconhecido ou sessão expirada. */
+export class NaoAutenticado extends ErroDeDominio {
+  constructor() {
+    super('Faça login para continuar');
+  }
+}
+
+/** Autenticado, mas sem permissão para a operação. */
+export class AcessoNegado extends ErroDeDominio {
+  constructor() {
+    super('Você não tem permissão para esta operação');
+  }
+}

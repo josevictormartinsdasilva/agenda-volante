@@ -1,13 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { buildApp } from '../src/app.js';
-import { criarAmbiente } from './helpers.js';
+import { criarApp } from './helpers.js';
 
 describe('GET /metrics', () => {
   let app: FastifyInstance;
 
   beforeEach(() => {
-    app = buildApp({ logLevel: 'silent' }, criarAmbiente().casos);
+    app = criarApp().app;
   });
   afterEach(() => app.close());
 
@@ -33,7 +32,7 @@ describe('GET /metrics', () => {
     const corpo = await metricas();
 
     expect(corpo).toContain(
-      'http_request_duration_seconds_count{method="POST",route="/aulas/:id/cancelar",status_code="404"} 2',
+      'http_request_duration_seconds_count{method="POST",route="/aulas/:id/cancelar",status_code="401"} 2',
     );
     expect(corpo).not.toContain('uma-aula');
   });
@@ -51,7 +50,11 @@ describe('GET /metrics', () => {
   });
 
   it('separa status 2xx de erro de validação 400 na mesma rota', async () => {
-    await app.inject({ method: 'POST', url: '/alunos', payload: { nome: 'Ana' } });
+    await app.inject({
+      method: 'POST',
+      url: '/alunos',
+      payload: { nome: 'Ana', email: 'ana@exemplo.com', senha: 'senha-da-ana' },
+    });
     await app.inject({ method: 'POST', url: '/alunos', payload: { nome: '' } });
 
     const corpo = await metricas();
@@ -82,7 +85,7 @@ describe('GET /metrics', () => {
 
   it('cada aplicação tem o seu registro: contagens não vazam entre instâncias', async () => {
     await app.inject({ method: 'GET', url: '/health' });
-    const outra = buildApp({ logLevel: 'silent' }, criarAmbiente().casos);
+    const outra = criarApp().app;
 
     const resposta = await outra.inject({ method: 'GET', url: '/metrics' });
     await outra.close();

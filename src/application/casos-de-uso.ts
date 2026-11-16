@@ -23,14 +23,20 @@ export interface Dependencias {
 }
 
 export interface CasosDeUso {
-  cadastrarAluno(dados: { nome: string }): Promise<Aluno>;
+  /** Alunos em ordem de nome, com o e-mail da conta (nulo se o aluno não tem conta). */
+  listarAlunos(): Promise<Array<Aluno & { email: string | null }>>;
   registrarPacote(alunoId: string, quantidade: number): Promise<Pacote>;
   publicarDisponibilidade(inicios: readonly Date[]): Promise<void>;
   consultarHorariosLivres(data: string): Promise<Date[]>;
   reservarAula(alunoId: string, inicio: Date): Promise<{ aula: Aula; pacote: Pacote }>;
   consultarAgenda(data: string): Promise<Aula[]>;
+  /**
+   * Com `solicitante`, só cancela se a aula é desse aluno; a de outro aluno responde
+   * "não encontrada", para não revelar que ela existe. Sem ele (instrutor), cancela qualquer uma.
+   */
   cancelarAula(
     aulaId: string,
+    solicitante?: { alunoId: string },
   ): Promise<{ aula: Aula; pacote: Pacote; creditoDevolvido: boolean }>;
 }
 
@@ -59,10 +65,13 @@ export function criarCasosDeUso(dep: Dependencias): CasosDeUso {
   }
 
   return {
-    async cadastrarAluno({ nome }) {
-      const aluno: Aluno = { id: dep.gerarId(), nome };
-      await repos.alunos.salvar(aluno);
-      return aluno;
+    async listarAlunos() {
+      const [alunos, contas] = await Promise.all([
+        repos.alunos.listar(),
+        repos.usuarios.listarPorPapel('aluno'),
+      ]);
+      const emailPorAluno = new Map(contas.map((conta) => [conta.alunoId, conta.email]));
+      return alunos.map((aluno) => ({ ...aluno, email: emailPorAluno.get(aluno.id) ?? null }));
     },
 
     async registrarPacote(alunoId, quantidade) {
@@ -122,9 +131,10 @@ export function criarCasosDeUso(dep: Dependencias): CasosDeUso {
         .sort((a, b) => a.inicio.getTime() - b.inicio.getTime());
     },
 
-    async cancelarAula(aulaId) {
+    async cancelarAula(aulaId, solicitante) {
       const aula = await repos.aulas.buscarPorId(aulaId);
       if (!aula) throw new AulaNaoEncontrada();
+      if (solicitante && solicitante.alunoId !== aula.alunoId) throw new AulaNaoEncontrada();
 
       const { aula: cancelada, creditoDevolvido } = cancelarAula(
         { aula, pacote: await pacoteDoAluno(aula.alunoId), agora: dep.agora() },

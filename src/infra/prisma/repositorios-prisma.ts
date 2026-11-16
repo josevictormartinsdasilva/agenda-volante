@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
-import { HorarioOcupado, SaldoInsuficiente } from '../../domain/erros.js';
+import { EmailJaCadastrado, HorarioOcupado, SaldoInsuficiente } from '../../domain/erros.js';
 import type {
   AlunoRepository,
   Armazenamento,
@@ -7,11 +7,19 @@ import type {
   DisponibilidadeRepository,
   PacoteRepository,
   Repositorios,
+  SessaoRepository,
+  UsuarioRepository,
 } from '../../domain/repositorios.js';
-import type { Aluno, Aula, Pacote } from '../../domain/tipos.js';
+import type { Aluno, Aula, Pacote, Papel, Sessao, Usuario } from '../../domain/tipos.js';
 
-/** Violação de índice único (no nosso caso, o parcial de R3 em Aula.inicio). */
+/** Violação de índice único: o parcial de R3 em Aula.inicio ou o do e-mail em Usuario. */
 const VIOLACAO_DE_UNICIDADE = 'P2002';
+
+function ehViolacaoDeUnicidade(erro: unknown): boolean {
+  return (
+    erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === VIOLACAO_DE_UNICIDADE
+  );
+}
 
 /**
  * O que os repositórios usam do Prisma: o client normal ou o de dentro de uma transação.
@@ -33,6 +41,51 @@ class AlunoPrisma implements AlunoRepository {
   async buscarPorId(id: string): Promise<Aluno | undefined> {
     const aluno = await this.db.aluno.findUnique({ where: { id } });
     return aluno ?? undefined;
+  }
+
+  async listar(): Promise<Aluno[]> {
+    return this.db.aluno.findMany({ orderBy: { nome: 'asc' } });
+  }
+}
+
+class UsuarioPrisma implements UsuarioRepository {
+  constructor(private readonly db: Db) {}
+
+  async criar(usuario: Usuario): Promise<void> {
+    try {
+      await this.db.usuario.create({ data: usuario });
+    } catch (erro) {
+      // O índice único do e-mail decide: de dois cadastros simultâneos, um cai aqui.
+      if (ehViolacaoDeUnicidade(erro)) throw new EmailJaCadastrado();
+      throw erro;
+    }
+  }
+
+  async buscarPorEmail(email: string): Promise<Usuario | undefined> {
+    const usuario = await this.db.usuario.findUnique({ where: { email } });
+    return usuario ?? undefined;
+  }
+
+  async listarPorPapel(papel: Papel): Promise<Usuario[]> {
+    return this.db.usuario.findMany({ where: { papel }, orderBy: { email: 'asc' } });
+  }
+}
+
+class SessaoPrisma implements SessaoRepository {
+  constructor(private readonly db: Db) {}
+
+  async salvar(sessao: Sessao): Promise<void> {
+    await this.db.sessao.create({ data: sessao });
+  }
+
+  async buscar(tokenHash: string): Promise<Sessao | undefined> {
+    const sessao = await this.db.sessao.findUnique({ where: { tokenHash } });
+    return sessao ?? undefined;
+  }
+
+  async remover(tokenHash: string): Promise<void> {
+    // `deleteMany` não lança quando a sessão já não existe (logout repetido).
+    await this.db.sessao.deleteMany({ where: { tokenHash } });
   }
 }
 
@@ -93,12 +146,7 @@ class AulaPrisma implements AulaRepository {
     try {
       await this.db.aula.upsert({ where: { id }, create: aula, update: dados });
     } catch (erro) {
-      if (
-        erro instanceof Prisma.PrismaClientKnownRequestError &&
-        erro.code === VIOLACAO_DE_UNICIDADE
-      ) {
-        throw new HorarioOcupado();
-      }
+      if (ehViolacaoDeUnicidade(erro)) throw new HorarioOcupado();
       throw erro;
     }
   }
@@ -128,6 +176,8 @@ class AulaPrisma implements AulaRepository {
 function montar(db: Db): Repositorios {
   return {
     alunos: new AlunoPrisma(db),
+    usuarios: new UsuarioPrisma(db),
+    sessoes: new SessaoPrisma(db),
     pacotes: new PacotePrisma(db),
     disponibilidade: new DisponibilidadePrisma(db),
     aulas: new AulaPrisma(db),

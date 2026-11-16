@@ -1,4 +1,4 @@
-import type { Aluno, Aula, Pacote } from './tipos.js';
+import type { Aluno, Aula, Pacote, Papel, Sessao, Usuario } from './tipos.js';
 
 /**
  * Portas de persistência (Repository). O domínio e os casos de uso dependem só destas
@@ -9,6 +9,25 @@ import type { Aluno, Aula, Pacote } from './tipos.js';
 export interface AlunoRepository {
   salvar(aluno: Aluno): Promise<void>;
   buscarPorId(id: string): Promise<Aluno | undefined>;
+  /** Todos os alunos, em ordem de nome. */
+  listar(): Promise<Aluno[]>;
+}
+
+export interface UsuarioRepository {
+  /**
+   * Insere a conta. Lança `EmailJaCadastrado` se o e-mail já tem conta: a unicidade vale
+   * no armazenamento, então dois cadastros simultâneos com o mesmo e-mail não passam juntos.
+   */
+  criar(usuario: Usuario): Promise<void>;
+  buscarPorEmail(email: string): Promise<Usuario | undefined>;
+  listarPorPapel(papel: Papel): Promise<Usuario[]>;
+}
+
+export interface SessaoRepository {
+  salvar(sessao: Sessao): Promise<void>;
+  buscar(tokenHash: string): Promise<Sessao | undefined>;
+  /** Idempotente: remover uma sessão que não existe não é erro. */
+  remover(tokenHash: string): Promise<void>;
 }
 
 /**
@@ -52,6 +71,8 @@ export interface AulaRepository {
 
 export interface Repositorios {
   alunos: AlunoRepository;
+  usuarios: UsuarioRepository;
+  sessoes: SessaoRepository;
   pacotes: PacoteRepository;
   disponibilidade: DisponibilidadeRepository;
   aulas: AulaRepository;

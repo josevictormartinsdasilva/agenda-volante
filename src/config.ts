@@ -15,6 +15,11 @@ export interface Config {
   cancelamentoAntecedenciaHoras: number;
   /** Duração máxima da aula, em minutos. Aulas começam sempre em hora cheia. */
   duracaoAulaMinutos: number;
+  /**
+   * Por quantas horas um login vale antes de pedir a senha de novo. Nenhuma credencial de
+   * conta vem do ambiente: o administrador nasce do comando `criar-admin` (ADR 0003).
+   */
+  sessaoDuracaoHoras: number;
 }
 
 function inteiro(nome: string, padrao: number, env: NodeJS.ProcessEnv): number {
@@ -41,5 +46,6 @@ export function carregarConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl,
     cancelamentoAntecedenciaHoras: inteiro('CANCELAMENTO_ANTECEDENCIA_HORAS', 48, env),
     duracaoAulaMinutos: inteiro('DURACAO_AULA_MINUTOS', 50, env),
+    sessaoDuracaoHoras: inteiro('SESSAO_DURACAO_HORAS', 168, env),
   };
 }

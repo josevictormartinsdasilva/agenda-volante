@@ -12,6 +12,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-agenda}:${POSTGRES_PASSWORD:-agenda_dev}@db:5432/${POSTGRES_DB:-agenda}
       CANCELAMENTO_ANTECEDENCIA_HORAS: ${CANCELAMENTO_ANTECEDENCIA_HORAS:-48}
       DURACAO_AULA_MINUTOS: ${DURACAO_AULA_MINUTOS:-50}
+      SESSAO_DURACAO_HORAS: ${SESSAO_DURACAO_HORAS:-168}
     depends_on:
       db:
         condition: service_healthy
