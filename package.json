@@ -1,6 +1,6 @@
 {
   "name": "agenda-volante",
-  "version": "0.4.0",
+  "version": "0.1.0",
   "private": true,
   "description": "API de agendamento de aulas para instrutor de trânsito autônomo",
   "type": "module",
@@ -13,13 +13,12 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "start": "node dist/server.js",
-    "admin:criar": "node dist/criar-admin.js",
     "lint": "eslint .",
     "lint:api": "spectral lint docs/openapi.yaml --fail-severity=warn",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "smoke": "docker run --rm -i -e BASE_URL=http://host.docker.internal:3000 -e ADMIN_EMAIL -e ADMIN_SENHA grafana/k6 run - < k6/smoke.js"
+    "smoke": "docker run --rm -i -e BASE_URL=http://host.docker.internal:3000 grafana/k6 run - < k6/smoke.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -32,8 +31,6 @@
     "@stoplight/spectral-cli": "^6.17.1",
     "@types/node": "^22.20.5",
     "@vitest/coverage-v8": "^3.2.7",
-    "ajv": "^8.20.0",
-    "ajv-formats": "^3.0.1",
     "eslint": "^9.39.5",
     "globals": "^17.14.0",
     "tsx": "^4.23.15",
