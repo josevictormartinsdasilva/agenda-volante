@@ -58,7 +58,9 @@ export function autenticacaoRoutes(autenticacao: Autenticacao, guarda: Guarda) {
           },
         },
       },
-      async (req, res) => res.status(201).send(await autenticacao.entrar(req.body)),
+      // `req.ip` é o IP do cliente; atrás de proxy, só com TRUST_PROXY=true (ADR 0004).
+      async (req, res) =>
+        res.status(201).send(await autenticacao.entrar({ ...req.body, origem: req.ip })),
     );
 
     // Logout da sessão do token enviado.

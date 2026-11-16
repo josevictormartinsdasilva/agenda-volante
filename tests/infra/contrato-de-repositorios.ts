@@ -120,6 +120,27 @@ export function contratoDeRepositorios(
       expect(await repos.sessoes.buscar('resumo-1')).toBeUndefined();
     });
 
+    it('sessão: remove as expiradas até o instante dado (inclusive) e devolve quantas', async () => {
+      await repos.usuarios.criar(CONTA_DA_ANA);
+      const sessao = (tokenHash: string, expiraEm: string) => ({
+        tokenHash,
+        usuarioId: 'u-ana',
+        papel: 'aluno' as const,
+        alunoId: 'ana',
+        expiraEm: new Date(expiraEm),
+      });
+      await repos.sessoes.salvar(sessao('vencida', '2026-11-16T11:00:00.000Z'));
+      await repos.sessoes.salvar(sessao('vence-agora', '2026-11-16T12:00:00.000Z'));
+      await repos.sessoes.salvar(sessao('valida', '2026-11-16T12:00:00.001Z'));
+
+      const removidas = await repos.sessoes.removerExpiradas(new Date('2026-11-16T12:00:00.000Z'));
+
+      expect(removidas).toBe(2);
+      expect(await repos.sessoes.buscar('vencida')).toBeUndefined();
+      expect(await repos.sessoes.buscar('vence-agora')).toBeUndefined();
+      expect(await repos.sessoes.buscar('valida')).toBeDefined();
+    });
+
     it('pacote: creditar cria o pacote e depois soma ao saldo', async () => {
       expect(await repos.pacotes.buscarPorAluno('ana')).toBeUndefined();
 

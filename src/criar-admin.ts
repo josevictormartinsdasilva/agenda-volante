@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { criarAutenticacao } from './application/autenticacao.js';
+import { criarLimitesDeLogin } from './application/limite-de-tentativas.js';
 import { criarAdminPeloTerminal } from './cli/criar-admin.js';
 import { criarTerminal } from './cli/terminal.js';
 import { carregarConfig } from './config.js';
@@ -26,6 +27,7 @@ const autenticacao = criarAutenticacao({
   senhas: { gerarHash: gerarHashDaSenha, conferir: conferirSenha },
   tokens: { gerar: gerarToken, resumir: resumirToken },
   sessaoDuracaoHoras: config.sessaoDuracaoHoras,
+  limites: criarLimitesDeLogin(config.login, () => new Date()), // não há login aqui
   agora: () => new Date(),
   gerarId: randomUUID,
 });

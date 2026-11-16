@@ -85,6 +85,40 @@ describe('cadastro, login e autorização pela API', () => {
       expect(desconhecido.json()).toEqual(senhaErrada.json());
     });
 
+    it('erros demais no login respondem 429 com Retry-After, e a origem é o IP do cliente', async () => {
+      await app.inject({ method: 'POST', url: '/alunos', payload: ANA });
+      for (let i = 0; i < 5; i++) {
+        expect((await entrar(ANA.email, 'senha-errada')).statusCode).toBe(401);
+      }
+
+      const bloqueado = await entrar(ANA.email, ANA.senha);
+
+      expect(bloqueado.statusCode).toBe(429);
+      expect(bloqueado.headers['retry-after']).toBe(String(15 * 60));
+      expect(bloqueado.json()).toEqual({
+        erro: 'Muitas tentativas de login. Tente de novo em 15 minutos',
+      });
+
+      // O limite por origem usa o IP da requisição: outro IP errando 20 vezes em
+      // e-mails diferentes é bloqueado; este cliente (127.0.0.1) não é afetado.
+      for (let i = 0; i < 20; i++) {
+        await app.inject({
+          method: 'POST',
+          url: '/sessoes',
+          remoteAddress: '203.0.113.7',
+          payload: { email: `alvo${i}@exemplo.com`, senha: 'chute' },
+        });
+      }
+      const doAtacante = await app.inject({
+        method: 'POST',
+        url: '/sessoes',
+        remoteAddress: '203.0.113.7',
+        payload: { email: 'mais-um@exemplo.com', senha: 'chute' },
+      });
+      expect(doAtacante.statusCode).toBe(429);
+      expect((await entrar('mais-um@exemplo.com', 'chute')).statusCode).toBe(401);
+    });
+
     it('depois do logout o token deixa de valer', async () => {
       const aluno = await teste.comoAluno();
 
@@ -198,8 +232,8 @@ describe('cadastro, login e autorização pela API', () => {
       },
     );
 
-    it('as rotas de saúde e métricas continuam abertas', async () => {
-      for (const url of ['/health', '/ready', '/metrics']) {
+    it('as rotas de saúde continuam abertas', async () => {
+      for (const url of ['/health', '/ready']) {
         expect((await app.inject({ method: 'GET', url })).statusCode).toBe(200);
       }
     });

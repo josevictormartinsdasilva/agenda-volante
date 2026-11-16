@@ -1,6 +1,7 @@
-import { CredenciaisInvalidas, NaoAutenticado } from '../domain/erros.js';
+import { CredenciaisInvalidas, MuitasTentativas, NaoAutenticado } from '../domain/erros.js';
 import type { Armazenamento } from '../domain/repositorios.js';
 import type { Identidade, Papel } from '../domain/tipos.js';
+import type { LimitesDeLogin } from './limite-de-tentativas.js';
 
 const MS_POR_HORA = 3_600_000;
 
@@ -13,6 +14,8 @@ export interface DependenciasDeAutenticacao {
   };
   tokens: { gerar(): string; resumir(token: string): string };
   sessaoDuracaoHoras: number;
+  /** Tentativas de login por e-mail e por origem (IP). */
+  limites: LimitesDeLogin;
   agora: () => Date;
   gerarId: () => string;
 }
@@ -38,10 +41,16 @@ export interface Autenticacao {
   criarAdmin(dados: { email: string; senha: string }): Promise<Conta>;
   /** Conta de instrutor, criada pelo administrador. */
   cadastrarInstrutor(dados: { email: string; senha: string }): Promise<Conta>;
-  entrar(dados: { email: string; senha: string }): Promise<SessaoAberta>;
+  /**
+   * `origem` é o IP de quem tenta (opcional: sem ele, só vale o limite por e-mail).
+   * Lança `MuitasTentativas` se o e-mail ou a origem passou do limite (ADR 0004).
+   */
+  entrar(dados: { email: string; senha: string; origem?: string }): Promise<SessaoAberta>;
   sair(token: string): Promise<void>;
   /** Lança `NaoAutenticado` se o token é desconhecido ou a sessão expirou. */
   identificar(token: string): Promise<Identidade>;
+  /** Apaga as sessões já vencidas. Devolve quantas foram. */
+  limparSessoesExpiradas(): Promise<number>;
 }
 
 /** Conta criada, sem nada da senha. */
@@ -58,7 +67,7 @@ const normalizarEmail = (email: string) => email.trim().toLowerCase();
  * e não um JWT: dá para encerrar no logout e não há segredo de assinatura (ADR 0003).
  */
 export function criarAutenticacao(dep: DependenciasDeAutenticacao): Autenticacao {
-  const { repositorios: repos, senhas, tokens } = dep;
+  const { repositorios: repos, senhas, tokens, limites } = dep;
 
   // Hash de uma senha qualquer, calculado uma vez: serve para gastar o mesmo tempo
   // quando o e-mail não existe (ver `entrar`).
@@ -98,8 +107,17 @@ export function criarAutenticacao(dep: DependenciasDeAutenticacao): Autenticacao
 
     cadastrarInstrutor: ({ email, senha }) => criarConta('instrutor', email, senha),
 
-    async entrar({ email, senha }) {
-      const usuario = await repos.usuarios.buscarPorEmail(normalizarEmail(email));
+    async entrar({ email, senha, origem }) {
+      const chave = normalizarEmail(email);
+      // Conta a tentativa antes de qualquer `await`: chamadas simultâneas não passam
+      // juntas. A origem vem primeiro: quem já foi barrado pelo IP não gasta o limite do
+      // e-mail alheio (senão um atacante bloquearia contas à vontade).
+      const esperaDaOrigem = origem === undefined ? 0 : limites.porOrigem.tentar(origem);
+      if (esperaDaOrigem > 0) throw new MuitasTentativas(esperaDaOrigem);
+      const esperaDoEmail = limites.porEmail.tentar(chave);
+      if (esperaDoEmail > 0) throw new MuitasTentativas(esperaDoEmail);
+
+      const usuario = await repos.usuarios.buscarPorEmail(chave);
       if (!usuario) {
         // Confere contra um hash qualquer para a resposta demorar o mesmo que a de
         // "senha errada": o tempo não revela se o e-mail tem conta.
@@ -108,6 +126,11 @@ export function criarAutenticacao(dep: DependenciasDeAutenticacao): Autenticacao
         throw new CredenciaisInvalidas();
       }
       if (!(await senhas.conferir(senha, usuario.senhaHash))) throw new CredenciaisInvalidas();
+
+      // Deu certo: os erros anteriores do e-mail são esquecidos, e o acerto não pesa no
+      // limite da origem (vários alunos podem entrar pela mesma rede).
+      limites.porEmail.esquecer(chave);
+      if (origem !== undefined) limites.porOrigem.devolver(origem);
 
       const token = tokens.gerar();
       const expiraEm = new Date(dep.agora().getTime() + dep.sessaoDuracaoHoras * MS_POR_HORA);
@@ -124,6 +147,8 @@ export function criarAutenticacao(dep: DependenciasDeAutenticacao): Autenticacao
     async sair(token) {
       await repos.sessoes.remover(tokens.resumir(token));
     },
+
+    limparSessoesExpiradas: () => repos.sessoes.removerExpiradas(dep.agora()),
 
     async identificar(token) {
       const tokenHash = tokens.resumir(token);

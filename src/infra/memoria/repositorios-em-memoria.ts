@@ -81,6 +81,17 @@ class SessaoEmMemoria implements SessaoRepository {
   async remover(tokenHash: string): Promise<void> {
     this.tabela.linhas.delete(tokenHash);
   }
+
+  async removerExpiradas(ate: Date): Promise<number> {
+    let removidas = 0;
+    for (const [tokenHash, sessao] of this.tabela.linhas) {
+      if (sessao.expiraEm.getTime() <= ate.getTime()) {
+        this.tabela.linhas.delete(tokenHash);
+        removidas++;
+      }
+    }
+    return removidas;
+  }
 }
 
 class PacoteEmMemoria implements PacoteRepository {

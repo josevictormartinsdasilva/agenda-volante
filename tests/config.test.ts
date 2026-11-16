@@ -44,6 +44,36 @@ describe('carregarConfig', () => {
     expect(carregarConfig({ SESSAO_DURACAO_HORAS: '12' }).sessaoDuracaoHoras).toBe(12);
   });
 
+  it('limites de login, porta de métricas e proxy têm padrões e são configuráveis', () => {
+    expect(carregarConfig({})).toMatchObject({
+      metricsPort: 9100,
+      trustProxy: false,
+      login: { maxTentativasPorEmail: 5, maxTentativasPorOrigem: 20, janelaMinutos: 15 },
+    });
+    expect(
+      carregarConfig({
+        METRICS_PORT: '9200',
+        TRUST_PROXY: 'true',
+        LOGIN_MAX_TENTATIVAS_POR_EMAIL: '3',
+        LOGIN_MAX_TENTATIVAS_POR_ORIGEM: '50',
+        LOGIN_JANELA_MINUTOS: '30',
+      }),
+    ).toMatchObject({
+      metricsPort: 9200,
+      trustProxy: true,
+      login: { maxTentativasPorEmail: 3, maxTentativasPorOrigem: 50, janelaMinutos: 30 },
+    });
+  });
+
+  it('TRUST_PROXY só aceita true ou false, e o limite de login não pode ser zero', () => {
+    expect(carregarConfig({ TRUST_PROXY: 'false' }).trustProxy).toBe(false);
+    expect(() => carregarConfig({ TRUST_PROXY: 'sim' })).toThrow(/TRUST_PROXY inválida/);
+    expect(() => carregarConfig({ LOGIN_MAX_TENTATIVAS_POR_EMAIL: '0' })).toThrow(
+      /LOGIN_MAX_TENTATIVAS_POR_EMAIL inválida/,
+    );
+    expect(() => carregarConfig({ LOGIN_JANELA_MINUTOS: '0' })).toThrow(/LOGIN_JANELA_MINUTOS inválida/);
+  });
+
   it('nenhuma credencial de conta vem do ambiente', () => {
     const config = carregarConfig({ INSTRUTOR_EMAIL: 'x@exemplo.com', INSTRUTOR_SENHA: 'qualquer-senha' });
 

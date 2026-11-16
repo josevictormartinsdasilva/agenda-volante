@@ -189,6 +189,16 @@ describe('aderência da API ao docs/openapi.yaml', () => {
       headers: aluno,
       payload: novoInstrutor,
     });
+    for (let i = 0; i < 5; i++) {
+      await app.inject({
+        method: 'POST',
+        url: '/sessoes',
+        payload: { email: 'bloqueado@exemplo.com', senha: 'chute' },
+      });
+    }
+    const loginBloqueado = await chamar('/sessoes', 'POST', '/sessoes', {
+      payload: { email: 'bloqueado@exemplo.com', senha: 'chute' },
+    });
 
     const reservar = (inicio: string) =>
       chamar('/aulas', 'POST', '/aulas', { headers: aluno, payload: { inicio } });
@@ -221,6 +231,7 @@ describe('aderência da API ao docs/openapi.yaml', () => {
       instrutorCriado,
       instrutorRepetido,
       instrutorPorAluno,
+      loginBloqueado,
       alunos,
       pacote,
       publicar,
@@ -245,7 +256,7 @@ describe('aderência da API ao docs/openapi.yaml', () => {
 
     // Sem isto o teste passaria mesmo que o fluxo falhasse: confirma cada caminho exercitado.
     expect(observadas.map((o) => o.resposta.statusCode)).toEqual([
-      201, 409, 201, 401, 201, 409, 403, 200, 200, 204, 200, 201, 409, 422, 200, 200, 409, 404, 404, 400, 403,
+      201, 409, 201, 401, 201, 409, 403, 429, 200, 200, 204, 200, 201, 409, 422, 200, 200, 409, 404, 404, 400, 403,
       401, 400, 204,
     ]);
 

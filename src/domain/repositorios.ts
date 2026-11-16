@@ -28,6 +28,8 @@ export interface SessaoRepository {
   buscar(tokenHash: string): Promise<Sessao | undefined>;
   /** Idempotente: remover uma sessão que não existe não é erro. */
   remover(tokenHash: string): Promise<void>;
+  /** Remove as sessões que expiram até `ate` (inclusive). Devolve quantas removeu. */
+  removerExpiradas(ate: Date): Promise<number>;
 }
 
 /**

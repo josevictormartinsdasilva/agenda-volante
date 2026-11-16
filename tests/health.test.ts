@@ -62,9 +62,9 @@ describe('GET /ready (readiness)', () => {
 
   it('a aplicação usa a verificação que recebeu ao ser montada', async () => {
     const { casos, autenticacao } = criarAmbiente();
-    const app = buildApp({ logLevel: 'silent' }, casos, autenticacao, () =>
-      Promise.reject(new Error('banco fora')),
-    );
+    const app = buildApp({ logLevel: 'silent' }, casos, autenticacao, {
+      verificarArmazenamento: () => Promise.reject(new Error('banco fora')),
+    });
 
     const resposta = await app.inject({ method: 'GET', url: '/ready' });
 
