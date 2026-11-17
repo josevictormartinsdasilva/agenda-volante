@@ -30,7 +30,7 @@ quem entra:
 
 - **Aluno:** cria a conta, marca e cancela aulas, vê o saldo e cuida da senha.
 - **Instrutor:** vê a agenda do dia (e marca ou cancela por um aluno), publica horários
-  (com repetição semanal), registra pacotes e gera o código para quem esqueceu a senha,
+  (com repetição semanal) e os retira, registra pacotes e gera o código para quem esqueceu a senha,
   com um link pronto para mandar pelo WhatsApp.
 
 O instrutor é cadastrado pelo administrador (`POST /instrutores`, passos abaixo); a tela do
@@ -207,6 +207,7 @@ Fluxo principal (contrato completo em [`docs/openapi.yaml`](docs/openapi.yaml)):
 | A interface pergunta quem está logado | `GET /sessoes/atual` |
 | Instrutor lista os alunos e registra o pacote de aulas | `GET /alunos`, `POST /alunos/{id}/pacote` |
 | Instrutor publica a disponibilidade | `POST /disponibilidades` |
+| Instrutor retira um horário (com aula reservada, só confirmando: a aula é cancelada e o crédito volta) | `POST /disponibilidades/retirar` |
 | Aluno consulta os horários livres | `GET /horarios-livres` |
 | Aluno reserva um horário | `POST /aulas` |
 | Instrutor consulta a agenda do dia | `GET /agenda` |
@@ -240,6 +241,10 @@ Fluxo principal (contrato completo em [`docs/openapi.yaml`](docs/openapi.yaml)):
 - **Saldo sob concorrência:** o crédito só muda por operações atômicas (`creditar`,
   `debitar`), e aula e pacote são gravados na mesma transação: ADR em
   [`docs/adr/0002-saldo-atomico-e-transacao.md`](docs/adr/0002-saldo-atomico-e-transacao.md).
+- **Retirar horário:** com aula reservada, a API recusa até o instrutor confirmar; aí cancela
+  a aula e devolve o crédito sem aplicar R6. Reserva e retirada simultâneas se encontram na
+  mesma linha de `Disponibilidade` (`FOR SHARE` contra `DELETE`): ADR em
+  [`docs/adr/0007-retirada-de-horario-com-confirmacao.md`](docs/adr/0007-retirada-de-horario-com-confirmacao.md).
 
 ## Estrutura
 
@@ -255,8 +260,6 @@ docs/         regras de negócio, ADR, OpenAPI, SLO, desempenho, LGPD, uso de IA
 
 ## Próximos passos
 
-- Retirar um horário publicado (pela API e pela tela do instrutor), tratando o caso em que
-  já há aula reservada nele
 - Tela do administrador para cadastrar instrutores (hoje, só pela API)
 - Teste de ponta a ponta da interface no CI (Playwright): hoje o fluxo no navegador foi
   conferido à mão, num Chrome sem janela, e só as partes puras do JavaScript têm teste
@@ -299,8 +302,8 @@ Levantados na revisão final do código, em ordem aproximada de prioridade:
 - **Mais de um instrutor:** o modelo assume um instrutor só (`Disponibilidade` tem o horário
   como chave e `Aula` não aponta para instrutor). Atender vários exige `instrutorId` nas
   duas tabelas e nas regras R3 e R4
-- **Remover disponibilidade:** o instrutor publica horários mas não consegue retirá-los, nem
-  tratar uma retirada que atinge aula já reservada
+- **Retirar vários horários de uma vez:** a retirada (ADR 0007) é de um horário por vez;
+  uma folga de uma semana inteira exige vários toques
 - **Idempotência em `POST /aulas`:** com internet instável no celular, um reenvio da mesma
   reserva volta como `409`. Aceitar um cabeçalho `Idempotency-Key` devolveria a resposta
   original

@@ -17,12 +17,11 @@ segurança, depois o que o instrutor e o aluno enxergam. Uma etapa por vez.
 | 4c | Conta do aluno: trocar senha, recuperar senha, excluir conta e `GET /minhas-aulas` | feito em 16/11 (ADR 0005): recuperação por código que o instrutor gera e repassa; gancho pronto para a recuperação por e-mail (sem rota). **Falta confirmar na CI** a tabela `CodigoDeRedefinicao` e o índice de `Aula.alunoId` |
 | 5 | Interface web do aluno (celular): ver horários livres, reservar e cancelar | feito em 17/11 (ADR 0006): HTML e JS sem build em `web/`, servidos pela API; criar conta, entrar, marcar, cancelar, minhas aulas, trocar senha, redefinir com código, sair e excluir conta; sessão em cookie `HttpOnly`. Fluxo conferido num Chrome sem janela (13 passos). **Falta conferir no Docker e num celular de verdade** |
 | 5b | Interface do instrutor: publicar horários, agenda do dia, pacotes e código de redefinição | feito em 17/11: agenda do dia (marcar e cancelar por um aluno), publicar horários com repetição semanal, alunos com saldo, pacote e código (com link para o WhatsApp). API ganhou `GET /sessoes/atual` e o saldo em `GET /alunos`. Roteiro no Chrome com 17 passos (aluno e instrutor). **Falta conferir no Docker e num celular de verdade** |
-| 5c | Retirar horário publicado (API e tela), tratando aula já reservada nele | pendente |
+| 5c | Retirar horário publicado (API e tela), tratando aula já reservada nele | feito em 17/11 (ADR 0007): `POST /disponibilidades/retirar`; com aula reservada, `409` até o instrutor confirmar, e aí a aula é cancelada e o crédito volta sem R6; a reserva trava o horário (`FOR SHARE`) e a retirada apaga antes de procurar a aula. Tela "Horários": tocar num horário publicado ou reservado retira. Roteiro no Chrome com 11 passos. **Falta confirmar na CI** o contrato "reserva e retirada simultâneas" contra o Postgres e **conferir num celular de verdade** |
 | 6 | Deploy em ambiente acessível ao instrutor, com backup do banco | pendente |
 | 7 | Atualizar Prisma 7 e Vitest 5 (`npm audit`) | pendente |
 
-Depois, para comercializar (ordem a decidir): mais de um instrutor, remover
-disponibilidade, extrato de créditos, cadastro ampliado com LGPD, idempotência em
+Depois, para comercializar (ordem a decidir): mais de um instrutor, extrato de créditos, cadastro ampliado com LGPD, idempotência em
 `POST /aulas`, lembretes. Detalhes em "Próximos passos" do README.
 
 ## Fase 1: trabalho do curso (Nível B), entregue em 13/11/2026

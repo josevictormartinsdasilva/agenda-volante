@@ -26,7 +26,7 @@ sem precisar interromper o instrutor.
 | Ação | Administrador | Instrutor | Aluno |
 |---|---|---|---|
 | Cadastrar instrutor | sim | não | não |
-| Publicar disponibilidade, ver a agenda do dia | não | sim | não |
+| Publicar e retirar disponibilidade, ver a agenda do dia | não | sim | não |
 | Listar alunos e registrar pacote vendido | não | sim | não |
 | Consultar horários livres | não | sim | sim |
 | Reservar aula | não | para qualquer aluno | só para si |
@@ -40,6 +40,11 @@ Quem esqueceu a senha recebe do instrutor um código de uso único, que vale 1 h
 a senha nova sozinho: o instrutor não vê nem define a senha. Ao excluir a conta, as aulas
 futuras do aluno são canceladas (o horário volta a ficar livre) e as passadas ficam no
 histórico, sem o nome.
+
+O instrutor pode retirar um horário publicado que ainda não começou. Se já há aula
+reservada nele, o sistema pede confirmação. Confirmada a retirada, a aula é cancelada e o
+crédito volta ao aluno mesmo com menos de 48 h: a R6 vale para o cancelamento comum, não
+para a desistência do instrutor.
 
 O administrador cuida das contas, não da agenda. A primeira conta de administrador é
 criada no servidor com `npm run admin:criar`.
