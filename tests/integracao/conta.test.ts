@@ -149,7 +149,7 @@ describe('conta do aluno pela API', () => {
       expect(depois.statusCode).toBe(401);
       const alunos = await app.inject({ method: 'GET', url: '/alunos', headers: instrutor });
       expect(alunos.json()).toEqual({
-        alunos: [{ id: aluno.alunoId, nome: 'Aluno removido', email: null }],
+        alunos: [{ id: aluno.alunoId, nome: 'Aluno removido', email: null, saldo: 0 }],
       });
     });
 

@@ -119,6 +119,22 @@ describe('cadastro, login e autorização pela API', () => {
       expect((await entrar('mais-um@exemplo.com', 'chute')).statusCode).toBe(401);
     });
 
+    it('GET /sessoes/atual diz quem está logado, para a interface escolher as telas', async () => {
+      const aluno = await teste.comoAluno();
+      const instrutor = await teste.comoInstrutor();
+      const admin = await teste.comoAdmin();
+
+      const doAluno = await app.inject({ method: 'GET', url: '/sessoes/atual', headers: aluno.headers });
+      const doInstrutor = await app.inject({ method: 'GET', url: '/sessoes/atual', headers: instrutor });
+      const doAdmin = await app.inject({ method: 'GET', url: '/sessoes/atual', headers: admin });
+      const semLogin = await app.inject({ method: 'GET', url: '/sessoes/atual' });
+
+      expect(doAluno.json()).toEqual({ papel: 'aluno', alunoId: aluno.alunoId });
+      expect(doInstrutor.json()).toEqual({ papel: 'instrutor', alunoId: null });
+      expect(doAdmin.json()).toEqual({ papel: 'admin', alunoId: null });
+      expect(semLogin.statusCode).toBe(401);
+    });
+
     it('depois do logout o token deixa de valer', async () => {
       const aluno = await teste.comoAluno();
 
@@ -361,6 +377,8 @@ describe('cadastro, login e autorização pela API', () => {
     const resposta = await app.inject({ method: 'GET', url: '/alunos', headers: instrutor });
 
     expect(resposta.statusCode).toBe(200);
-    expect(resposta.json()).toEqual({ alunos: [{ id: ana.alunoId, nome: 'Ana', email: ana.email }] });
+    expect(resposta.json()).toEqual({
+      alunos: [{ id: ana.alunoId, nome: 'Ana', email: ana.email, saldo: 0 }],
+    });
   });
 });

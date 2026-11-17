@@ -181,6 +181,10 @@ class PacotePrisma implements PacoteRepository {
     const pacote = await this.db.pacote.findUnique({ where: { alunoId } });
     return pacote ?? undefined;
   }
+
+  async listar(): Promise<Pacote[]> {
+    return this.db.pacote.findMany();
+  }
 }
 
 class DisponibilidadePrisma implements DisponibilidadeRepository {

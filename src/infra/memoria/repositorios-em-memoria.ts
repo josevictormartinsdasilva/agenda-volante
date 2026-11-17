@@ -173,6 +173,10 @@ class PacoteEmMemoria implements PacoteRepository {
   async buscarPorAluno(alunoId: string): Promise<Pacote | undefined> {
     return this.tabela.linhas.get(alunoId);
   }
+
+  async listar(): Promise<Pacote[]> {
+    return [...this.tabela.linhas.values()];
+  }
 }
 
 class DisponibilidadeEmMemoria implements DisponibilidadeRepository {

@@ -5,6 +5,7 @@ import {
   COOKIE_PADRAO,
   gravarCookieDeSessao,
   type Guarda,
+  identidadeDe,
   type OpcoesDoCookie,
   tokenDaRequisicao,
 } from './autorizacao.js';
@@ -77,6 +78,12 @@ export function autenticacaoRoutes(
         return res.status(201).send(sessao);
       },
     );
+
+    // Quem está logado: a interface usa para escolher as telas (aluno ou instrutor).
+    app.get('/sessoes/atual', { onRequest: guarda('admin', 'instrutor', 'aluno') }, async (req) => {
+      const { papel, alunoId } = identidadeDe(req);
+      return { papel, alunoId };
+    });
 
     // Logout da sessão do token enviado.
     app.delete(

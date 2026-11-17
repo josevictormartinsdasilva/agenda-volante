@@ -23,8 +23,11 @@ export interface Dependencias {
 }
 
 export interface CasosDeUso {
-  /** Alunos em ordem de nome, com o e-mail da conta (nulo se o aluno não tem conta). */
-  listarAlunos(): Promise<Array<Aluno & { email: string | null }>>;
+  /**
+   * Alunos em ordem de nome, com o e-mail da conta (nulo se o aluno não tem conta) e o saldo
+   * do pacote (zero se nunca recebeu crédito).
+   */
+  listarAlunos(): Promise<Array<Aluno & { email: string | null; saldo: number }>>;
   registrarPacote(alunoId: string, quantidade: number): Promise<Pacote>;
   publicarDisponibilidade(inicios: readonly Date[]): Promise<void>;
   consultarHorariosLivres(data: string): Promise<Date[]>;
@@ -68,12 +71,19 @@ export function criarCasosDeUso(dep: Dependencias): CasosDeUso {
 
   return {
     async listarAlunos() {
-      const [alunos, contas] = await Promise.all([
+      // Três consultas para a lista inteira, não uma por aluno.
+      const [alunos, contas, pacotes] = await Promise.all([
         repos.alunos.listar(),
         repos.usuarios.listarPorPapel('aluno'),
+        repos.pacotes.listar(),
       ]);
       const emailPorAluno = new Map(contas.map((conta) => [conta.alunoId, conta.email]));
-      return alunos.map((aluno) => ({ ...aluno, email: emailPorAluno.get(aluno.id) ?? null }));
+      const saldoPorAluno = new Map(pacotes.map((pacote) => [pacote.alunoId, pacote.saldo]));
+      return alunos.map((aluno) => ({
+        ...aluno,
+        email: emailPorAluno.get(aluno.id) ?? null,
+        saldo: saldoPorAluno.get(aluno.id) ?? 0,
+      }));
     },
 
     async registrarPacote(alunoId, quantidade) {

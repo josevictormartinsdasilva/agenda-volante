@@ -73,6 +73,8 @@ export interface PacoteRepository {
    */
   debitar(alunoId: string): Promise<Pacote>;
   buscarPorAluno(alunoId: string): Promise<Pacote | undefined>;
+  /** Todos os pacotes (um por aluno que já recebeu crédito). */
+  listar(): Promise<Pacote[]>;
 }
 
 export interface DisponibilidadeRepository {

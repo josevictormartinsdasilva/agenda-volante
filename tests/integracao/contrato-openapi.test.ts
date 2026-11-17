@@ -97,9 +97,9 @@ describe('aderência da API ao docs/openapi.yaml', () => {
   });
   afterEach(() => app.close());
 
-  it('o contrato tem as 16 operações da API', () => {
+  it('o contrato tem as 17 operações da API', () => {
     // Sem isto, um contrato vazio faria os testes abaixo passarem sem conferir nada.
-    expect(operacoes).toHaveLength(16);
+    expect(operacoes).toHaveLength(17);
   });
 
   it('toda operação documentada existe como rota da aplicação', async () => {
@@ -275,6 +275,8 @@ describe('aderência da API ao docs/openapi.yaml', () => {
       await chamar('/alunos', 'POST', '/alunos', { payload: { nome: '' } }),
       await chamar('/minhas-aulas', 'GET', '/minhas-aulas', { headers: aluno }),
       await chamar('/minhas-aulas', 'GET', '/minhas-aulas', { headers: instrutor }),
+      await chamar('/sessoes/atual', 'GET', '/sessoes/atual', { headers: aluno }),
+      await chamar('/sessoes/atual', 'GET', '/sessoes/atual'),
       await chamar('/conta/senha', 'POST', '/conta/senha', {
         headers: aluno,
         payload: { senhaAtual: 'chute', novaSenha: 'senha-nova-da-ana' },
@@ -315,7 +317,7 @@ describe('aderência da API ao docs/openapi.yaml', () => {
     // Sem isto o teste passaria mesmo que o fluxo falhasse: confirma cada caminho exercitado.
     expect(observadas.map((o) => o.resposta.statusCode)).toEqual([
       201, 409, 201, 401, 201, 409, 403, 429, 200, 200, 204, 200, 201, 409, 422, 200, 200, 409, 404, 404, 400, 403,
-      401, 400, 200, 403, 403, 404, 400, 201, 204, 204, 403, 204, 204,
+      401, 400, 200, 403, 200, 401, 403, 404, 400, 201, 204, 204, 403, 204, 204,
     ]);
 
     for (const { caminho, metodo, resposta } of observadas) {

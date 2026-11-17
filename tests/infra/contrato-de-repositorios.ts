@@ -233,6 +233,19 @@ export function contratoDeRepositorios(
       expect(await repos.pacotes.buscarPorAluno('ana')).toEqual({ alunoId: 'ana', saldo: 7 });
     });
 
+    it('pacote: lista todos os pacotes', async () => {
+      await repos.alunos.salvar({ id: 'bia', nome: 'Bia' });
+      await repos.pacotes.creditar('ana', 3);
+      await repos.pacotes.creditar('bia', 1);
+
+      const pacotes = await repos.pacotes.listar();
+
+      expect(pacotes.sort((a, b) => a.alunoId.localeCompare(b.alunoId))).toEqual([
+        { alunoId: 'ana', saldo: 3 },
+        { alunoId: 'bia', saldo: 1 },
+      ]);
+    });
+
     it('pacote: debitar consome 1 crédito e devolve o saldo novo', async () => {
       await repos.pacotes.creditar('ana', 2);
 
