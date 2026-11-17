@@ -78,7 +78,9 @@ Antes de dizer que uma tarefa terminou, rode lint, typecheck e test:coverage. Tu
 - `web/`: interface do aluno em HTML e JS sem build (ADR 0006). Texto da API ou do usuário
   entra sempre como texto (`append`, `textContent`), nunca como HTML; nada de script
   inline (a CSP bloqueia). Os módulos têm JSDoc e passam pelo `tsc` (`checkJs`).
-  Funções puras ficam fora de `app.js` para terem teste em `tests/web/`.
+  Organização: `app.js` só escolhe a tela (pelo papel de `GET /sessoes/atual`);
+  `publicas.js`, `aluno.js`, `instrutor.js` e `conta.js` têm as telas; `ui.js`, as peças
+  comuns. Funções puras (`datas.js`, `agenda.js`, `api.js`) têm teste em `tests/web/`.
 - A sessão do navegador é o cookie `sessao` (`HttpOnly`, `SameSite=Strict`). Nunca guarde
   token em `localStorage`.
 

@@ -24,11 +24,17 @@ curl http://localhost:3000/health
 # {"status":"ok"}
 ```
 
-**Interface do aluno:** abra http://localhost:3000 no navegador (ou, no celular na mesma rede
-Wi-Fi, `http://<ip-do-computador>:3000`). O aluno cria a conta, marca e cancela aulas, vê o
-saldo e cuida da senha. Para ter horários e saldo, o instrutor precisa antes registrar o
-pacote e publicar a disponibilidade pela API (passos abaixo). A interface do instrutor
-ainda não existe.
+**Interface web:** abra http://localhost:3000 no navegador (ou, no celular na mesma rede
+Wi-Fi, `http://<ip-do-computador>:3000`). A mesma página serve aluno e instrutor, conforme
+quem entra:
+
+- **Aluno:** cria a conta, marca e cancela aulas, vê o saldo e cuida da senha.
+- **Instrutor:** vê a agenda do dia (e marca ou cancela por um aluno), publica horários
+  (com repetição semanal), registra pacotes e gera o código para quem esqueceu a senha,
+  com um link pronto para mandar pelo WhatsApp.
+
+O instrutor é cadastrado pelo administrador (`POST /instrutores`, passos abaixo); a tela do
+administrador ainda não existe.
 
 O Compose sobe **sem nenhum `.env`**: ele tem padrões para tudo (porta 3000, banco `agenda`,
 48 h de cancelamento, aula de 50 min). Ele também liga `COOKIE_SEGURO=false`, para o login
@@ -198,6 +204,7 @@ Fluxo principal (contrato completo em [`docs/openapi.yaml`](docs/openapi.yaml)):
 | Qualquer conta troca a própria senha; o aluno exclui a própria conta | `POST /conta/senha`, `DELETE /conta` |
 | Instrutor gera código para o aluno que esqueceu a senha; o aluno redefine | `POST /alunos/{id}/codigo-de-redefinicao`, `POST /senha/redefinicao` |
 | Aluno vê as próprias aulas e o saldo | `GET /minhas-aulas` |
+| A interface pergunta quem está logado | `GET /sessoes/atual` |
 | Instrutor lista os alunos e registra o pacote de aulas | `GET /alunos`, `POST /alunos/{id}/pacote` |
 | Instrutor publica a disponibilidade | `POST /disponibilidades` |
 | Aluno consulta os horários livres | `GET /horarios-livres` |
@@ -207,8 +214,9 @@ Fluxo principal (contrato completo em [`docs/openapi.yaml`](docs/openapi.yaml)):
 
 ## Decisões de design
 
-- **Interface do aluno:** HTML e JavaScript sem framework nem build, em `web/`, servidos
-  pela própria API; a sessão do navegador fica num cookie `HttpOnly` e `SameSite=Strict`,
+- **Interface do aluno e do instrutor:** HTML e JavaScript sem framework nem build, em
+  `web/`, servidos pela própria API (a tela pergunta `GET /sessoes/atual` para saber quem
+  entrou); a sessão do navegador fica num cookie `HttpOnly` e `SameSite=Strict`,
   e o JavaScript é conferido pelo `tsc` via JSDoc. ADR em
   [`docs/adr/0006-interface-web-sem-build-com-sessao-em-cookie.md`](docs/adr/0006-interface-web-sem-build-com-sessao-em-cookie.md).
 - **Autenticação:** e-mail e senha (scrypt), sessão por token guardada no banco e três
@@ -237,7 +245,7 @@ Fluxo principal (contrato completo em [`docs/openapi.yaml`](docs/openapi.yaml)):
 
 ```
 src/          código da aplicação
-web/          interface do aluno (HTML, CSS e JS sem build)
+web/          interface do aluno e do instrutor (HTML, CSS e JS sem build)
 tests/        testes automatizados
 k6/           smoke test de desempenho
 prisma/       schema e migrations
@@ -247,8 +255,9 @@ docs/         regras de negócio, ADR, OpenAPI, SLO, desempenho, LGPD, uso de IA
 
 ## Próximos passos
 
-- Interface do instrutor: publicar horários, ver a agenda do dia, registrar pacotes e gerar
-  o código de redefinição sem usar `curl`
+- Retirar um horário publicado (pela API e pela tela do instrutor), tratando o caso em que
+  já há aula reservada nele
+- Tela do administrador para cadastrar instrutores (hoje, só pela API)
 - Teste de ponta a ponta da interface no CI (Playwright): hoje o fluxo no navegador foi
   conferido à mão, num Chrome sem janela, e só as partes puras do JavaScript têm teste
 
