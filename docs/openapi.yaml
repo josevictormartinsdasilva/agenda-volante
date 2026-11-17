@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agenda Volante
-  version: 0.6.0
+  version: 0.7.0
   description: |
     API de agendamento de aulas de um instrutor de trânsito autônomo. O aluno consulta
     os horários livres e reserva sem interromper o instrutor.
