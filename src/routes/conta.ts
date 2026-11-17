@@ -1,11 +1,22 @@
 import type { FastifyInstance } from 'fastify';
 import type { Autenticacao } from '../application/autenticacao.js';
-import { type Guarda, identidadeDe, tokenDaRequisicao } from './autorizacao.js';
+import {
+  apagarCookieDeSessao,
+  COOKIE_PADRAO,
+  type Guarda,
+  identidadeDe,
+  type OpcoesDoCookie,
+  tokenDaRequisicao,
+} from './autorizacao.js';
 
 const novaSenha = { type: 'string', minLength: 8, maxLength: 128 } as const;
 
 /** A própria conta: trocar senha, redefinir com código e excluir (ADR 0005). */
-export function contaRoutes(autenticacao: Autenticacao, guarda: Guarda) {
+export function contaRoutes(
+  autenticacao: Autenticacao,
+  guarda: Guarda,
+  cookie: OpcoesDoCookie = COOKIE_PADRAO,
+) {
   return async (app: FastifyInstance): Promise<void> => {
     // Qualquer conta troca a própria senha, confirmando a atual.
     app.post<{ Body: { senhaAtual: string; novaSenha: string } }>(
@@ -48,6 +59,7 @@ export function contaRoutes(autenticacao: Autenticacao, guarda: Guarda) {
       },
       async (req, res) => {
         await autenticacao.excluirConta({ usuarioId: identidadeDe(req).usuarioId, ...req.body });
+        apagarCookieDeSessao(res, cookie);
         return res.status(204).send();
       },
     );

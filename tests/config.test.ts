@@ -80,6 +80,11 @@ describe('carregarConfig', () => {
     expect(() => carregarConfig({ CODIGO_REDEFINICAO_MINUTOS: '0' })).toThrow(/inválida/);
   });
 
+  it('o cookie da sessão é Secure por padrão; COOKIE_SEGURO=false desliga', () => {
+    expect(carregarConfig({}).cookieSeguro).toBe(true);
+    expect(carregarConfig({ COOKIE_SEGURO: 'false' }).cookieSeguro).toBe(false);
+  });
+
   it('nenhuma credencial de conta vem do ambiente', () => {
     const config = carregarConfig({ INSTRUTOR_EMAIL: 'x@exemplo.com', INSTRUTOR_SENHA: 'qualquer-senha' });
 

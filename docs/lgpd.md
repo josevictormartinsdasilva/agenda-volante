@@ -24,6 +24,10 @@ contas de acesso (etapa 4 da fase 2).
 | Código de redefinição | `CodigoDeRedefinicao` | Redefinir a senha esquecida. Guarda o resumo do código e a validade (1 hora); apagado no uso |
 | Aulas e saldo | `Aula`, `Pacote` | O serviço em si: agenda e créditos |
 
+**No navegador:** um único cookie, `sessao`, com o token do login (`HttpOnly`, só para este
+site, vence com a sessão). É estritamente necessário para o login funcionar; não há cookie
+de análise, publicidade ou de terceiros, nem nada em `localStorage`.
+
 **Não é guardado:** CPF, telefone, endereço, data de nascimento, dados de pagamento, dados
 de saúde ou qualquer dado sensível. Os logs da aplicação registram método, rota, status e
 duração; não registram corpo de requisição, e-mail, senha nem token.

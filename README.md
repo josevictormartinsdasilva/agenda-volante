@@ -24,8 +24,15 @@ curl http://localhost:3000/health
 # {"status":"ok"}
 ```
 
+**Interface do aluno:** abra http://localhost:3000 no navegador (ou, no celular na mesma rede
+Wi-Fi, `http://<ip-do-computador>:3000`). O aluno cria a conta, marca e cancela aulas, vê o
+saldo e cuida da senha. Para ter horários e saldo, o instrutor precisa antes registrar o
+pacote e publicar a disponibilidade pela API (passos abaixo). A interface do instrutor
+ainda não existe.
+
 O Compose sobe **sem nenhum `.env`**: ele tem padrões para tudo (porta 3000, banco `agenda`,
-48 h de cancelamento, aula de 50 min). Para mudar portas, senha do banco ou regras de
+48 h de cancelamento, aula de 50 min). Ele também liga `COOKIE_SEGURO=false`, para o login
+da interface funcionar em http local; **em produção, com HTTPS, deixe `COOKIE_SEGURO=true`**. Para mudar portas, senha do banco ou regras de
 negócio, copie `.env.example` para `.env` e ajuste. O `.env` nunca vai para o repositório.
 
 Para parar e apagar os contêineres e os dados do banco:
@@ -200,6 +207,10 @@ Fluxo principal (contrato completo em [`docs/openapi.yaml`](docs/openapi.yaml)):
 
 ## Decisões de design
 
+- **Interface do aluno:** HTML e JavaScript sem framework nem build, em `web/`, servidos
+  pela própria API; a sessão do navegador fica num cookie `HttpOnly` e `SameSite=Strict`,
+  e o JavaScript é conferido pelo `tsc` via JSDoc. ADR em
+  [`docs/adr/0006-interface-web-sem-build-com-sessao-em-cookie.md`](docs/adr/0006-interface-web-sem-build-com-sessao-em-cookie.md).
 - **Autenticação:** e-mail e senha (scrypt), sessão por token guardada no banco e três
   papéis: administrador (contas), instrutor (agenda) e aluno. O primeiro administrador nasce
   de um comando de terminal, sem credencial em configuração. ADR em
@@ -226,6 +237,7 @@ Fluxo principal (contrato completo em [`docs/openapi.yaml`](docs/openapi.yaml)):
 
 ```
 src/          código da aplicação
+web/          interface do aluno (HTML, CSS e JS sem build)
 tests/        testes automatizados
 k6/           smoke test de desempenho
 prisma/       schema e migrations
@@ -234,6 +246,11 @@ docs/         regras de negócio, ADR, OpenAPI, SLO, desempenho, LGPD, uso de IA
 ```
 
 ## Próximos passos
+
+- Interface do instrutor: publicar horários, ver a agenda do dia, registrar pacotes e gerar
+  o código de redefinição sem usar `curl`
+- Teste de ponta a ponta da interface no CI (Playwright): hoje o fluxo no navegador foi
+  conferido à mão, num Chrome sem janela, e só as partes puras do JavaScript têm teste
 
 - Recuperação de senha por e-mail, sem depender do instrutor: implementar `EnvioDeCodigo`
   com um provedor, confirmar o e-mail no cadastro, limitar os pedidos e abrir

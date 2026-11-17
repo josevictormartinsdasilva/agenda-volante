@@ -22,6 +22,11 @@ export interface Config {
   sessaoDuracaoHoras: number;
   /** Por quantos minutos vale o código de redefinição de senha que o instrutor gera. */
   codigoRedefinicaoMinutos: number;
+  /**
+   * Cookie da sessão só por HTTPS (`Secure`). Desligue apenas para usar a interface em
+   * http local (o Compose desliga); em produção fica ligado.
+   */
+  cookieSeguro: boolean;
   /** Porta interna do `/metrics`, separada da API e não publicada no Compose. */
   metricsPort: number;
   /**
@@ -75,6 +80,7 @@ export function carregarConfig(env: NodeJS.ProcessEnv = process.env): Config {
     duracaoAulaMinutos: inteiro('DURACAO_AULA_MINUTOS', 50, env),
     sessaoDuracaoHoras: inteiro('SESSAO_DURACAO_HORAS', 168, env),
     codigoRedefinicaoMinutos: positivo('CODIGO_REDEFINICAO_MINUTOS', 60, env),
+    cookieSeguro: booleano('COOKIE_SEGURO', true, env),
     metricsPort: inteiro('METRICS_PORT', 9100, env),
     trustProxy: booleano('TRUST_PROXY', false, env),
     login: {

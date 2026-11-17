@@ -1,0 +1,238 @@
+/* Pensado para o celular primeiro: uma coluna, toques grandes, texto legível no sol. */
+:root {
+  --fundo: #f6f7f9;
+  --cartao: #ffffff;
+  --texto: #1f2933;
+  --suave: #5b6672;
+  --borda: #d9dee4;
+  --primaria: #1d4ed8;
+  --primaria-texto: #ffffff;
+  --perigo: #b42318;
+  --sucesso-fundo: #e7f6ec;
+  --sucesso-texto: #12632f;
+  --erro-fundo: #fdecea;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #101418;
+    --cartao: #1a2027;
+    --texto: #e8ecf0;
+    --suave: #a3adb8;
+    --borda: #2f3943;
+    --primaria: #6b9bff;
+    --primaria-texto: #0b1220;
+    --perigo: #ff8a80;
+    --sucesso-fundo: #12321f;
+    --sucesso-texto: #8fe0a9;
+    --erro-fundo: #3a1714;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font: 1rem/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.topo {
+  background: var(--primaria);
+  padding: 0.75rem 1rem;
+}
+
+.marca {
+  color: var(--primaria-texto);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+main {
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: 1rem 1rem 6rem;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0.5rem 0 1rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 1.5rem 0 0.5rem;
+}
+
+.cartao {
+  background: var(--cartao);
+  border: 1px solid var(--borda);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.saldo {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.suave {
+  color: var(--suave);
+}
+
+form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+label {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 600;
+}
+
+input {
+  font: inherit;
+  padding: 0.7rem;
+  border: 1px solid var(--borda);
+  border-radius: 0.5rem;
+  background: var(--cartao);
+  color: var(--texto);
+}
+
+button,
+.botao {
+  font: inherit;
+  font-weight: 600;
+  min-height: 2.75rem;
+  padding: 0.6rem 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: var(--primaria);
+  color: var(--primaria-texto);
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+button.secundario {
+  background: transparent;
+  color: var(--primaria);
+  border: 1px solid var(--borda);
+}
+
+button.perigo {
+  background: var(--perigo);
+  color: #ffffff;
+}
+
+.lista {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.lista li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--cartao);
+  border: 1px solid var(--borda);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+}
+
+.dias {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.dias button {
+  flex: 0 0 auto;
+  background: var(--cartao);
+  color: var(--texto);
+  border: 1px solid var(--borda);
+}
+
+.dias button[aria-pressed='true'] {
+  background: var(--primaria);
+  color: var(--primaria-texto);
+}
+
+.horarios {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  gap: 0.5rem;
+}
+
+.aviso {
+  background: var(--sucesso-fundo);
+  color: var(--sucesso-texto);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+
+.erro {
+  color: var(--perigo);
+  margin: 0;
+}
+
+.erro:not(:empty) {
+  background: var(--erro-fundo);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+
+.links {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+}
+
+.navegacao {
+  position: fixed;
+  inset: auto 0 0 0;
+  display: flex;
+  justify-content: space-around;
+  background: var(--cartao);
+  border-top: 1px solid var(--borda);
+  padding: 0.5rem 0 calc(0.5rem + env(safe-area-inset-bottom));
+}
+
+.navegacao a {
+  color: var(--suave);
+  text-decoration: none;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+}
+
+.navegacao a[aria-current='page'] {
+  color: var(--primaria);
+}
+
+details {
+  margin-top: 2rem;
+}
+
+details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--perigo);
+}

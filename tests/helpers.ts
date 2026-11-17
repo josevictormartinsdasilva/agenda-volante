@@ -92,7 +92,12 @@ export async function cabecalhoDoAdmin(ambiente: Ambiente) {
  * instrutor ou de um aluno recém-cadastrado.
  */
 export function criarApp(ambiente: Ambiente = criarAmbiente()) {
-  const app = buildApp({ logLevel: 'silent' }, ambiente.casos, ambiente.autenticacao);
+  // A sessão de teste dura 24 h (`criarAmbiente`); o cookie acompanha.
+  const app = buildApp(
+    { logLevel: 'silent', sessaoDuracaoHoras: 24 },
+    ambiente.casos,
+    ambiente.autenticacao,
+  );
   let alunos = 0;
 
   return {

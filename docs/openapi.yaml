@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agenda Volante
-  version: 0.5.0
+  version: 0.6.0
   description: |
     API de agendamento de aulas de um instrutor de trânsito autônomo. O aluno consulta
     os horários livres e reserva sem interromper o instrutor.
@@ -22,6 +22,9 @@ info:
     - **aluno** consulta horários e reserva e cancela só as próprias aulas.
 
     Sem token a resposta é `401`; com token mas sem permissão, `403`.
+
+    O login também grava o token no cookie `sessao` (`HttpOnly`, `SameSite=Strict`), que é
+    o que a interface web em `/` usa. Com o cabeçalho `Authorization`, só ele vale.
 
     Todas as datas e horas trafegam em UTC (ISO 8601). O parâmetro `data` é um dia
     `AAAA-MM-DD` lido no fuso `America/Fortaleza`.
@@ -57,6 +60,7 @@ paths:
       operationId: reservarAula
       security:
         - tokenDeSessao: []
+        - cookieDeSessao: []
       summary: Reserva uma aula
       description: |
         Valida R1 a R5 e consome 1 crédito do pacote do aluno. A aula dura o
@@ -133,6 +137,7 @@ paths:
       operationId: cancelarAula
       security:
         - tokenDeSessao: []
+        - cookieDeSessao: []
       summary: Cancela uma aula
       description: |
         O aluno só cancela as próprias aulas; a de outro aluno responde `404`, como se
@@ -181,6 +186,7 @@ paths:
       operationId: consultarHorariosLivres
       security:
         - tokenDeSessao: []
+        - cookieDeSessao: []
       summary: Lista os horários livres de um dia
       description: Horários publicados, ainda no futuro e sem aula reservada.
       parameters:
@@ -208,6 +214,7 @@ paths:
       operationId: consultarAgenda
       security:
         - tokenDeSessao: []
+        - cookieDeSessao: []
       summary: Consulta a agenda do dia (instrutor)
       description: Aulas reservadas no dia, em ordem de horário. Aulas canceladas não aparecem.
       parameters:
@@ -240,6 +247,7 @@ paths:
       operationId: publicarDisponibilidade
       security:
         - tokenDeSessao: []
+        - cookieDeSessao: []
       summary: Publica horários disponíveis
       description: |
         Idempotente: publicar um horário que já existe não o duplica. Todos os horários
@@ -321,6 +329,7 @@ paths:
       description: Alunos em ordem de nome, com o e-mail da conta. Serve para o instrutor achar o aluno ao registrar um pacote.
       security:
         - tokenDeSessao: []
+        - cookieDeSessao: []
       responses:
         '200':
           description: Alunos cadastrados
@@ -348,6 +357,7 @@ paths:
         nunca é devolvida nem guardada (só o hash).
       security:
         - tokenDeSessao: []
+        - cookieDeSessao: []
       requestBody:
         required: true
         content:
@@ -393,6 +403,7 @@ paths:
         nesta chamada continua valendo.
       security:
         - tokenDeSessao: []
+        - cookieDeSessao: []
       requestBody:
         required: true
         content:
@@ -432,6 +443,7 @@ paths:
         Instrutor e administrador recebem `403`.
       security:
         - tokenDeSessao: []
+        - cookieDeSessao: []
       requestBody:
         required: true
         content:
@@ -466,6 +478,7 @@ paths:
       description: Todas as aulas do aluno (reservadas e canceladas), em ordem de horário, e o saldo do pacote.
       security:
         - tokenDeSessao: []
+        - cookieDeSessao: []
       responses:
         '200':
           description: Aulas e saldo
@@ -500,6 +513,7 @@ paths:
         - $ref: '#/components/parameters/AlunoId'
       security:
         - tokenDeSessao: []
+        - cookieDeSessao: []
       responses:
         '201':
           description: Código gerado
@@ -586,6 +600,13 @@ paths:
       responses:
         '201':
           description: Sessão aberta
+          headers:
+            Set-Cookie:
+              description: |
+                `sessao=<token>; Path=/; HttpOnly; SameSite=Strict; Max-Age=<validade>; Secure`
+                (`Secure` some com `COOKIE_SEGURO=false`, só para http local)
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -616,6 +637,7 @@ paths:
       description: Encerra a sessão do token enviado. As outras sessões da mesma conta continuam valendo.
       security:
         - tokenDeSessao: []
+        - cookieDeSessao: []
       responses:
         '204':
           description: Sessão encerrada
@@ -628,6 +650,7 @@ paths:
       operationId: registrarPacote
       security:
         - tokenDeSessao: []
+        - cookieDeSessao: []
       summary: Registra o pacote de aulas vendido
       description: Soma a quantidade ao saldo atual do aluno. A venda e o pagamento ficam fora do sistema.
       parameters:
@@ -665,6 +688,11 @@ components:
       type: http
       scheme: bearer
       description: Token devolvido por `POST /sessoes`
+    cookieDeSessao:
+      type: apiKey
+      in: cookie
+      name: sessao
+      description: Cookie gravado por `POST /sessoes`; usado pela interface web
 
   parameters:
     AulaId:

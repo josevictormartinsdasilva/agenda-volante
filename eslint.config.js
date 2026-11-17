@@ -13,6 +13,11 @@ export default tseslint.config(
     },
   },
   {
+    // Interface web: roda no navegador
+    files: ['web/**/*.js'],
+    languageOptions: { globals: globals.browser },
+  },
+  {
     // Scripts do k6 rodam no runtime do k6, não no Node: __ENV é global dele
     files: ['k6/**/*.js'],
     languageOptions: { globals: { ...globals.node, __ENV: 'readonly' } },

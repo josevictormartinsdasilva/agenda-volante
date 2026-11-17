@@ -1,8 +1,19 @@
 import type { FastifyInstance } from 'fastify';
 import type { Autenticacao } from '../application/autenticacao.js';
-import { type Guarda, tokenDaRequisicao } from './autorizacao.js';
+import {
+  apagarCookieDeSessao,
+  COOKIE_PADRAO,
+  gravarCookieDeSessao,
+  type Guarda,
+  type OpcoesDoCookie,
+  tokenDaRequisicao,
+} from './autorizacao.js';
 
-export function autenticacaoRoutes(autenticacao: Autenticacao, guarda: Guarda) {
+export function autenticacaoRoutes(
+  autenticacao: Autenticacao,
+  guarda: Guarda,
+  cookie: OpcoesDoCookie = COOKIE_PADRAO,
+) {
   return async (app: FastifyInstance): Promise<void> => {
     // Pública: o próprio aluno cria a conta. Ele só reserva depois que o instrutor
     // registrar um pacote, então uma conta avulsa não ocupa a agenda.
@@ -59,8 +70,12 @@ export function autenticacaoRoutes(autenticacao: Autenticacao, guarda: Guarda) {
         },
       },
       // `req.ip` é o IP do cliente; atrás de proxy, só com TRUST_PROXY=true (ADR 0004).
-      async (req, res) =>
-        res.status(201).send(await autenticacao.entrar({ ...req.body, origem: req.ip })),
+      async (req, res) => {
+        const sessao = await autenticacao.entrar({ ...req.body, origem: req.ip });
+        // O token vai no corpo (para clientes de API) e no cookie (para o navegador).
+        gravarCookieDeSessao(res, sessao.token, cookie);
+        return res.status(201).send(sessao);
+      },
     );
 
     // Logout da sessão do token enviado.
@@ -69,6 +84,7 @@ export function autenticacaoRoutes(autenticacao: Autenticacao, guarda: Guarda) {
       { onRequest: guarda('admin', 'instrutor', 'aluno') },
       async (req, res) => {
         await autenticacao.sair(tokenDaRequisicao(req));
+        apagarCookieDeSessao(res, cookie);
         return res.status(204).send();
       },
     );
