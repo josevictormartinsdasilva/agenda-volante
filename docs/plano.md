@@ -15,7 +15,8 @@ segurança, depois o que o instrutor e o aluno enxergam. Uma etapa por vez.
 | 4 | Autenticação: contas com e-mail e senha, login com sessão no banco, papéis admin, instrutor e aluno nas rotas, comando `admin:criar` para a primeira conta, ADR 0003 e `docs/lgpd.md` | feito em 16/11. **Falta confirmar na CI** as tabelas novas no Postgres e **rodar o k6 de novo** (o p95 medido é de antes do login) e **testar o `admin:criar` no contêiner** (com TTY, a senha não pode aparecer) |
 | 4b | Endurecer o login: limite de tentativas, limpeza das sessões expiradas e proteção do `/metrics` | feito em 16/11 (ADR 0004): 5 tentativas por e-mail e 20 por IP a cada 15 min, limpeza de sessões a cada hora, `/metrics` na porta interna 9100. **Falta conferir no Docker** que a 9100 não aparece fora do Compose |
 | 4c | Conta do aluno: trocar senha, recuperar senha, excluir conta e `GET /minhas-aulas` | feito em 16/11 (ADR 0005): recuperação por código que o instrutor gera e repassa; gancho pronto para a recuperação por e-mail (sem rota). **Falta confirmar na CI** a tabela `CodigoDeRedefinicao` e o índice de `Aula.alunoId` |
-| 5 | Interface web do aluno (celular): ver horários livres, reservar e cancelar | pendente |
+| 5 | Interface web do aluno (celular): ver horários livres, reservar e cancelar | feito em 17/11 (ADR 0006): HTML e JS sem build em `web/`, servidos pela API; criar conta, entrar, marcar, cancelar, minhas aulas, trocar senha, redefinir com código, sair e excluir conta; sessão em cookie `HttpOnly`. Fluxo conferido num Chrome sem janela (13 passos). **Falta conferir no Docker e num celular de verdade** |
+| 5b | Interface do instrutor: publicar horários, agenda do dia, pacotes e código de redefinição | pendente |
 | 6 | Deploy em ambiente acessível ao instrutor, com backup do banco | pendente |
 | 7 | Atualizar Prisma 7 e Vitest 5 (`npm audit`) | pendente |
 
