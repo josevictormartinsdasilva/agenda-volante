@@ -22,6 +22,7 @@
     "smoke": "docker run --rm -i -e BASE_URL=http://host.docker.internal:3000 -e ADMIN_EMAIL -e ADMIN_SENHA grafana/k6 run - < k6/smoke.js"
   },
   "dependencies": {
+    "@fastify/static": "^10.1.11",
     "@prisma/client": "^6.19.3",
     "fastify": "^5.12.8",
     "prisma": "^6.19.3",

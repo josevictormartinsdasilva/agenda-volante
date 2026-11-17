@@ -16,6 +16,9 @@ services:
       # /metrics escuta nesta porta, que de propósito NÃO está em "ports": só quem está na
       # rede do Compose (um Prometheus, por exemplo) alcança. Ver ADR 0004.
       METRICS_PORT: 9100
+      # A interface roda em http://localhost: sem HTTPS, o cookie da sessão não pode ser
+      # "Secure". Em produção, com HTTPS, deixe COOKIE_SEGURO=true (o padrão da API).
+      COOKIE_SEGURO: ${COOKIE_SEGURO:-false}
     depends_on:
       db:
         condition: service_healthy

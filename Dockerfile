@@ -22,6 +22,8 @@ RUN npm ci --omit=dev
 COPY prisma ./prisma
 RUN npx prisma generate
 COPY --from=build /app/dist ./dist
+# Interface web: arquivos estáticos, sem build, servidos pela própria API
+COPY web ./web
 USER node
 # 3000: API. 9100: /metrics, só para a rede interna (o Compose não a publica).
 EXPOSE 3000 9100

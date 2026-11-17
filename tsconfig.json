@@ -8,7 +8,10 @@
     "skipLibCheck": true,
     "outDir": "dist",
     "rootDir": ".",
-    "types": ["node"]
+    "types": ["node"],
+    // A interface (web/) é JavaScript sem build; o tsc confere os tipos pelos comentários JSDoc.
+    "allowJs": true,
+    "checkJs": true
   },
-  "include": ["src", "tests", "vitest.config.ts"]
+  "include": ["src", "tests", "web", "vitest.config.ts"]
 }
