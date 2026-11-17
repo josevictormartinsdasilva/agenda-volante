@@ -236,3 +236,112 @@ details summary {
   font-weight: 600;
   color: var(--perigo);
 }
+
+/* ---------------------------------------------------------------- instrutor */
+
+select {
+  font: inherit;
+  padding: 0.5rem;
+  border: 1px solid var(--borda);
+  border-radius: 0.5rem;
+  background: var(--cartao);
+  color: var(--texto);
+  max-width: 55%;
+}
+
+.horarios button {
+  display: grid;
+  justify-items: center;
+  line-height: 1.2;
+}
+
+.horarios button small {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.horarios button.escolha {
+  background: var(--cartao);
+  color: var(--texto);
+  border: 1px solid var(--borda);
+}
+
+.horarios button.escolha[aria-pressed='true'] {
+  background: var(--primaria);
+  color: var(--primaria-texto);
+  border-color: var(--primaria);
+}
+
+.horarios button.publicado,
+.horarios button.reservado,
+.horarios button.passou {
+  background: transparent;
+  color: var(--suave);
+  border: 1px dashed var(--borda);
+  cursor: default;
+  opacity: 1;
+}
+
+.horarios button.reservado {
+  border-style: solid;
+}
+
+.horarios button.passou {
+  text-decoration: line-through;
+}
+
+.em-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.em-linha input {
+  width: 4.5rem;
+}
+
+.lista li.cartao-aluno {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.cabecalho-aluno {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  word-break: break-word;
+}
+
+.saldo-pequeno {
+  font-size: 1.4rem;
+  font-weight: 700;
+  min-width: 2.5rem;
+  text-align: center;
+}
+
+.cartao-aluno details {
+  margin-top: 0;
+}
+
+.cartao-aluno details summary {
+  color: var(--primaria);
+}
+
+.cartao-aluno details[open] {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.codigo-valor {
+  font-size: 1.4rem;
+  letter-spacing: 0.1em;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+
+input[type='search'] {
+  width: 100%;
+  margin-bottom: 0.75rem;
+}
