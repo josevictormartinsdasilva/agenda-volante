@@ -131,4 +131,48 @@ describe('fluxo principal pela API', () => {
     const corpoRuim = await app.inject({ method: 'POST', url: '/alunos', payload: { nome: '' } });
     expect(corpoRuim.statusCode).toBe(400);
   });
+  describe('retirar horário', () => {
+    const retirar = (headers: Cabecalho, payload: object) =>
+      app.inject({ method: 'POST', url: '/disponibilidades/retirar', headers, payload });
+
+    it('retira o horário livre e ele some dos horários livres', async () => {
+      await publicar([H10, H11]);
+
+      const retirada = await retirar(instrutor, { inicio: H10 });
+
+      expect(retirada.statusCode).toBe(200);
+      expect(retirada.json()).toEqual({ aulaCancelada: null });
+      const livres = await app.inject({
+        method: 'GET',
+        url: '/horarios-livres?data=2026-11-20',
+        headers: instrutor,
+      });
+      expect(livres.json()).toEqual({ data: '2026-11-20', horarios: [H11] });
+    });
+
+    it('com aula reservada responde 409; confirmado, cancela e devolve o crédito', async () => {
+      const aluno = await alunoComPacote(1);
+      await publicar([H10]);
+      await reservar(aluno.headers, H10);
+
+      const semConfirmar = await retirar(instrutor, { inicio: H10 });
+      expect(semConfirmar.statusCode).toBe(409);
+
+      const confirmado = await retirar(instrutor, { inicio: H10, cancelarAula: true });
+      expect(confirmado.statusCode).toBe(200);
+      expect(confirmado.json()).toMatchObject({
+        aulaCancelada: { alunoId: aluno.alunoId, inicio: H10, status: 'cancelada' },
+      });
+      const minhas = await app.inject({ method: 'GET', url: '/minhas-aulas', headers: aluno.headers });
+      expect(minhas.json()).toMatchObject({ saldo: 1, aulas: [{ status: 'cancelada' }] });
+    });
+
+    it('só o instrutor retira; horário não publicado responde 422', async () => {
+      const aluno = await teste.comoAluno();
+      await publicar([H10]);
+
+      expect((await retirar(aluno.headers, { inicio: H10 })).statusCode).toBe(403);
+      expect((await retirar(instrutor, { inicio: H11 })).statusCode).toBe(422);
+    });
+  });
 });

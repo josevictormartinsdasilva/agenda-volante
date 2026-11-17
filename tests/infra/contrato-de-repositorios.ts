@@ -294,6 +294,59 @@ export function contratoDeRepositorios(
       ]);
     });
 
+    it('disponibilidade: retirar apaga o horário uma vez; a segunda devolve false', async () => {
+      await repos.disponibilidade.publicar([H10, H11]);
+
+      expect(await repos.disponibilidade.retirar(H10)).toBe(true);
+      expect(await repos.disponibilidade.retirar(H10)).toBe(false);
+      expect(await repos.disponibilidade.retirar(H12)).toBe(false);
+      expect(await repos.disponibilidade.listarEntre(H10, H12)).toEqual([H11]);
+    });
+
+    it('disponibilidade: travar diz se o horário está publicado', async () => {
+      await repos.disponibilidade.publicar([H10]);
+
+      expect(await repos.emTransacao((tx) => tx.disponibilidade.travar(H10))).toBe(true);
+      expect(await repos.emTransacao((tx) => tx.disponibilidade.travar(H11))).toBe(false);
+    });
+
+    it('transação: retirar um horário é desfeito se o trabalho lança depois', async () => {
+      await repos.disponibilidade.publicar([H10]);
+      const falha = new Error('falha no meio');
+
+      await expect(
+        repos.emTransacao(async (tx) => {
+          await tx.disponibilidade.retirar(H10);
+          throw falha;
+        }),
+      ).rejects.toBe(falha);
+
+      expect(await repos.disponibilidade.listarEntre(H10, H11)).toEqual([H10]);
+    });
+
+    it('R4: reserva e retirada simultâneas nunca deixam aula reservada em horário retirado', async () => {
+      await repos.disponibilidade.publicar([H10]);
+      const recusa = new Error('há aula reservada');
+
+      // Os dois lados como os casos de uso fazem: a reserva trava o horário antes de gravar
+      // a aula; a retirada apaga o horário e só depois procura aula reservada nele.
+      await Promise.allSettled([
+        repos.emTransacao(async (tx) => {
+          if (await tx.disponibilidade.travar(H10)) await tx.aulas.salvar(aula('a1', H10));
+        }),
+        repos.emTransacao(async (tx) => {
+          if (!(await tx.disponibilidade.retirar(H10))) return;
+          const aulas = await tx.aulas.listarEntre(H10, H11);
+          if (aulas.some((a) => a.status === 'reservada')) throw recusa;
+        }),
+      ]);
+
+      const publicado = (await repos.disponibilidade.listarEntre(H10, H11)).length === 1;
+      const reservada = (await repos.aulas.buscarPorId('a1')) !== undefined;
+      // Ou a reserva entrou e o horário ficou, ou o horário saiu e não há aula.
+      expect(publicado).toBe(reservada);
+    });
+
     it('aula: guarda, busca por id e atualiza o status', async () => {
       await repos.aulas.salvar(aula('a1', H10));
       expect(await repos.aulas.buscarPorId('a1')).toEqual(aula('a1', H10));

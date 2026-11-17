@@ -280,6 +280,65 @@ paths:
               example:
                 erro: A aula deve começar em hora cheia (7h, 8h, 13h...)
 
+  /disponibilidades/retirar:
+    post:
+      tags: [Instrutor]
+      operationId: retirarDisponibilidade
+      security:
+        - tokenDeSessao: []
+        - cookieDeSessao: []
+      summary: Retira um horário publicado
+      description: |
+        Só horários futuros. Se há aula reservada no horário, responde `409` e não muda
+        nada; com `cancelarAula: true`, retira o horário, cancela a aula e devolve o crédito
+        ao aluno, qualquer que seja a antecedência (R6 não se aplica: quem desistiu do
+        horário foi o instrutor).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetiradaPedido'
+            example:
+              inicio: '2026-11-20T13:00:00.000Z'
+              cancelarAula: true
+      responses:
+        '200':
+          description: Horário retirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetiradaResposta'
+              example:
+                aulaCancelada:
+                  id: 5e0b9a40-6f1d-4c53-8d7a-2a9f1b3c4d55
+                  alunoId: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
+                  inicio: '2026-11-20T13:00:00.000Z'
+                  fim: '2026-11-20T13:50:00.000Z'
+                  status: cancelada
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/AcessoNegado'
+        '409':
+          description: Há aula reservada no horário e `cancelarAula` não foi enviado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                erro: Há uma aula reservada nesse horário. Confirme para cancelá-la e devolver o crédito ao aluno
+        '422':
+          description: O horário não está publicado, ou já começou ou já passou
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              example:
+                erro: Esse horário não está na disponibilidade publicada pelo instrutor
+
   /alunos:
     post:
       tags: [Alunos]
@@ -1041,6 +1100,25 @@ components:
           items:
             type: string
             format: date-time
+    RetiradaPedido:
+      type: object
+      required: [inicio]
+      properties:
+        inicio:
+          type: string
+          format: date-time
+        cancelarAula:
+          type: boolean
+          description: Confirma o cancelamento da aula reservada no horário, se houver
+    RetiradaResposta:
+      type: object
+      required: [aulaCancelada]
+      properties:
+        aulaCancelada:
+          description: A aula cancelada pela retirada, ou nulo se o horário estava livre
+          oneOf:
+            - $ref: '#/components/schemas/Aula'
+            - type: 'null'
     HorariosLivresResposta:
       type: object
       required: [data, horarios]

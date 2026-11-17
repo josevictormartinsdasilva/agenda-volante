@@ -72,6 +72,27 @@ export function agendaRoutes(casos: CasosDeUso, guarda: Guarda) {
       },
     );
 
+    app.post<{ Body: { inicio: string; cancelarAula?: boolean } }>(
+      '/disponibilidades/retirar',
+      {
+        ...soInstrutor,
+        schema: {
+          body: {
+            type: 'object',
+            required: ['inicio'],
+            properties: {
+              inicio: { type: 'string', format: 'date-time' },
+              cancelarAula: { type: 'boolean' },
+            },
+          },
+        },
+      },
+      async (req) =>
+        casos.retirarDisponibilidade(new Date(req.body.inicio), {
+          cancelarAula: req.body.cancelarAula,
+        }),
+    );
+
     app.get<{ Querystring: { data: string } }>(
       '/horarios-livres',
       { ...qualquerLogado, schema: { querystring: querySchema } },

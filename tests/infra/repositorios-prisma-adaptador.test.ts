@@ -19,8 +19,9 @@ function criarDbFalso() {
     sessao: { create: vi.fn(), findUnique: vi.fn(), deleteMany: vi.fn() },
     codigoDeRedefinicao: { upsert: vi.fn(), deleteMany: vi.fn() },
     pacote: { upsert: vi.fn(), updateManyAndReturn: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
-    disponibilidade: { createMany: vi.fn(), findMany: vi.fn() },
+    disponibilidade: { createMany: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn() },
     aula: { upsert: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
+    $queryRaw: vi.fn(),
     // Como o Prisma: chama o trabalho com o client da transação e repassa o resultado.
     $transaction: vi.fn(async (trabalho: (tx: unknown) => Promise<unknown>) => trabalho(db)),
   };
@@ -277,6 +278,28 @@ describe('adaptador Prisma', () => {
       orderBy: { inicio: 'asc' },
     });
     expect(lista).toEqual([H10, H11]);
+  });
+
+  it('disponibilidade: retirar apaga pelo início e diz se apagou alguma linha', async () => {
+    const { db, repos } = criarDbFalso();
+    db.disponibilidade.deleteMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+
+    expect(await repos.disponibilidade.retirar(H10)).toBe(true);
+    expect(await repos.disponibilidade.retirar(H10)).toBe(false);
+    expect(db.disponibilidade.deleteMany).toHaveBeenCalledWith({ where: { inicio: H10 } });
+  });
+
+  it('disponibilidade: travar consulta com FOR SHARE e diz se achou o horário', async () => {
+    const { db, repos } = criarDbFalso();
+    db.$queryRaw.mockResolvedValueOnce([{ '?column?': 1 }]).mockResolvedValueOnce([]);
+
+    expect(await repos.disponibilidade.travar(H10)).toBe(true);
+    expect(await repos.disponibilidade.travar(H11)).toBe(false);
+
+    // Tagged template: o 1º argumento são os trechos do SQL; os seguintes, os parâmetros.
+    const [trechos, inicio] = db.$queryRaw.mock.calls[0] as [TemplateStringsArray, string];
+    expect(trechos.join('?')).toMatch(/FROM "Disponibilidade"[\s\S]*FOR SHARE/);
+    expect(inicio).toBe(H10.toISOString());
   });
 
   it('aulas: lista as que começam em [de, ate) em ordem de início', async () => {

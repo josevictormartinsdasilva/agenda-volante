@@ -286,6 +286,12 @@ select {
   border-style: solid;
 }
 
+/* Publicado ou reservado no futuro: tocar retira o horário. */
+.horarios button.publicado:enabled,
+.horarios button.reservado:enabled {
+  cursor: pointer;
+}
+
 .horarios button.passou {
   text-decoration: line-through;
 }

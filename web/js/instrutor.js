@@ -162,6 +162,8 @@ async function telaHorarios() {
 
   /** Horários marcados para publicar (ISO). */
   const escolhidos = new Set();
+  const alunos = await listarAlunos();
+  const nomes = new Map(alunos.map((aluno) => [aluno.id, aluno.nome]));
   const erro = el('p', { class: 'erro', role: 'alert' });
   const grade = el('div', { class: 'horarios' });
   const semanas = /** @type {HTMLInputElement} */ (
@@ -184,15 +186,43 @@ async function telaHorarios() {
     try {
       const { livres, aulas } = await carregarDia(diaDosHorarios);
       const publicados = new Set(livres);
-      const reservados = new Set(aulas.map((aula) => aula.inicio));
+      /** @type {Map<string, Aula>} */
+      const reservados = new Map(aulas.map((aula) => [aula.inicio, aula]));
       const agora = Date.now();
       grade.replaceChildren(
         ...HORAS_DA_GRADE.map((hora) => {
           const inicio = inicioNoDia(diaDosHorarios, hora);
           const rotulo = `${String(hora).padStart(2, '0')}:00`;
-          if (reservados.has(inicio)) return el('button', { type: 'button', disabled: true, class: 'reservado' }, rotulo, el('small', {}, 'Reservado'));
-          if (publicados.has(inicio)) return el('button', { type: 'button', disabled: true, class: 'publicado' }, rotulo, el('small', {}, 'Publicado'));
-          if (Date.parse(inicio) <= agora) return el('button', { type: 'button', disabled: true, class: 'passou' }, rotulo);
+          const passou = Date.parse(inicio) <= agora;
+          const aula = reservados.get(inicio);
+          if (aula) {
+            return el(
+              'button',
+              {
+                type: 'button',
+                class: 'reservado',
+                disabled: passou,
+                'aria-label': `${rotulo}, reservado. Retirar`,
+                onclick: () => void retirar(inicio, aula),
+              },
+              rotulo,
+              el('small', {}, 'Reservado'),
+            );
+          }
+          if (publicados.has(inicio)) {
+            return el(
+              'button',
+              {
+                type: 'button',
+                class: 'publicado',
+                'aria-label': `${rotulo}, publicado. Retirar`,
+                onclick: () => void retirar(inicio),
+              },
+              rotulo,
+              el('small', {}, 'Publicado'),
+            );
+          }
+          if (passou) return el('button', { type: 'button', disabled: true, class: 'passou' }, rotulo);
           return el(
             'button',
             {
@@ -217,6 +247,30 @@ async function telaHorarios() {
     }
   }
 
+  /**
+   * Retira um horário publicado. Com aula reservada, avisa que ela será cancelada e o
+   * crédito volta ao aluno; a API só cancela com essa confirmação (`cancelarAula`).
+   * @param {string} inicio
+   * @param {Aula} [aula]
+   */
+  async function retirar(inicio, aula) {
+    const quando = dataHoraEmFortaleza(inicio);
+    const aluno = aula ? (nomes.get(aula.alunoId) ?? 'o aluno') : '';
+    const pergunta = aula
+      ? `${quando} tem aula de ${aluno}. Retirar o horário cancela a aula e devolve o crédito ao aluno. Continuar?`
+      : `Retirar o horário de ${quando}?`;
+    if (!window.confirm(pergunta)) return;
+    try {
+      await api.chamar('POST', '/disponibilidades/retirar', { inicio, cancelarAula: Boolean(aula) });
+      estado.aviso = aula
+        ? `Horário de ${quando} retirado. A aula de ${aluno} foi cancelada e o crédito voltou para o pacote.`
+        : `Horário de ${quando} retirado.`;
+    } catch (falha) {
+      estado.aviso = mensagemDe(falha);
+    }
+    recarregar();
+  }
+
   async function enviar() {
     const repeticoes = Math.min(8, Math.max(0, Number(semanas.value) || 0));
     const inicios = repetirNasSemanas([...escolhidos].sort(), repeticoes);
@@ -237,7 +291,11 @@ async function telaHorarios() {
   await carregar();
   return [
     el('h1', {}, 'Publicar horários'),
-    el('p', { class: 'suave' }, 'Escolha o dia e toque nas horas em que você pode dar aula.'),
+    el(
+      'p',
+      { class: 'suave' },
+      'Escolha o dia e toque nas horas em que você pode dar aula. Toque num horário publicado para retirá-lo.',
+    ),
     seletorDeDias({
       dias,
       hoje,
@@ -251,7 +309,6 @@ async function telaHorarios() {
     grade,
     el('label', { class: 'em-linha' }, 'Repetir nas próximas semanas:', semanas),
     publicar,
-    el('p', { class: 'suave' }, 'Horário publicado ainda não pode ser retirado por aqui.'),
     navegacao(ITENS, '#/horarios'),
   ];
 }
