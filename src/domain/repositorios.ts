@@ -81,6 +81,14 @@ export interface DisponibilidadeRepository {
   /** Idempotente: publicar um horário que já existe não o duplica. */
   publicar(inicios: readonly Date[]): Promise<void>;
   listarEntre(de: Date, ate: Date): Promise<Date[]>;
+  /** Apaga o horário e devolve `true`; devolve `false` se ele não estava publicado. */
+  retirar(inicio: Date): Promise<boolean>;
+  /**
+   * Diz se o horário está publicado e, dentro de `emTransacao`, impede que ele seja retirado
+   * até a transação terminar (R4 sob concorrência, ADR 0007). Uma retirada que já apagou o
+   * horário, mas ainda não terminou, faz esta chamada esperar e devolver `false`.
+   */
+  travar(inicio: Date): Promise<boolean>;
 }
 
 export interface AulaRepository {

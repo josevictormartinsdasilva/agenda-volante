@@ -3,7 +3,10 @@ import {
   AlunoNaoEncontrado,
   AulaJaCancelada,
   AulaNaoEncontrada,
+  HorarioComAulaReservada,
   HorarioForaDaGrade,
+  HorarioIndisponivel,
+  RetiradaNoPassado,
 } from '../domain/erros.js';
 import { ehHoraCheia, intervaloDoDia } from '../domain/horario.js';
 import { horariosLivres } from '../domain/horarios-livres.js';
@@ -30,6 +33,15 @@ export interface CasosDeUso {
   listarAlunos(): Promise<Array<Aluno & { email: string | null; saldo: number }>>;
   registrarPacote(alunoId: string, quantidade: number): Promise<Pacote>;
   publicarDisponibilidade(inicios: readonly Date[]): Promise<void>;
+  /**
+   * Retira um horário publicado (futuro). Se há aula reservada nele, só retira com
+   * `cancelarAula: true`: a aula é cancelada e o crédito volta ao aluno, qualquer que
+   * seja a antecedência (R6 não se aplica: quem desistiu foi o instrutor).
+   */
+  retirarDisponibilidade(
+    inicio: Date,
+    opcoes?: { cancelarAula?: boolean },
+  ): Promise<{ aulaCancelada: Aula | null }>;
   consultarHorariosLivres(data: string): Promise<Date[]>;
   reservarAula(alunoId: string, inicio: Date): Promise<{ aula: Aula; pacote: Pacote }>;
   consultarAgenda(data: string): Promise<Aula[]>;
@@ -97,6 +109,29 @@ export function criarCasosDeUso(dep: Dependencias): CasosDeUso {
       await repos.disponibilidade.publicar(inicios);
     },
 
+    async retirarDisponibilidade(inicio, opcoes = {}) {
+      if (inicio.getTime() <= dep.agora().getTime()) throw new RetiradaNoPassado();
+
+      return repos.emTransacao(async (tx) => {
+        // Apagar primeiro e só então procurar a aula: o DELETE espera uma reserva em
+        // andamento terminar (ela travou o horário), então a busca abaixo já a enxerga.
+        if (!(await tx.disponibilidade.retirar(inicio))) throw new HorarioIndisponivel();
+
+        const aulas = await tx.aulas.listarEntre(inicio, new Date(inicio.getTime() + 1));
+        const aula = aulas.find((a) => a.status === 'reservada');
+        if (!aula) return { aulaCancelada: null };
+
+        // Lançar desfaz a retirada: sem confirmação, nada muda.
+        if (!opcoes.cancelarAula) throw new HorarioComAulaReservada();
+
+        // Se o próprio aluno cancelou no meio do caminho, o crédito já foi tratado por R6.
+        if (!(await tx.aulas.cancelar(aula.id))) return { aulaCancelada: null };
+        // Quem desistiu do horário foi o instrutor: o crédito volta sempre, sem R6.
+        await tx.pacotes.creditar(aula.alunoId, 1);
+        return { aulaCancelada: { ...aula, status: 'cancelada' as const } };
+      });
+    },
+
     async consultarHorariosLivres(data) {
       const { de, ate } = intervaloDoDia(data);
       const [publicados, aulas] = await Promise.all([
@@ -130,6 +165,9 @@ export function criarCasosDeUso(dep: Dependencias): CasosDeUso {
 
       // O saldo devolvido é o que o armazenamento debitou, não o calculado sobre o retrato.
       return repos.emTransacao(async (tx) => {
+        // R4 de novo, agora travando o horário: o instrutor pode tê-lo retirado depois da
+        // leitura acima, e não pode retirá-lo enquanto esta reserva não termina.
+        if (!(await tx.disponibilidade.travar(inicio))) throw new HorarioIndisponivel();
         await tx.aulas.salvar(aula);
         return { aula, pacote: await tx.pacotes.debitar(alunoId) };
       });

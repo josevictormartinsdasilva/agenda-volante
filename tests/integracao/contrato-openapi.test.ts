@@ -97,9 +97,9 @@ describe('aderência da API ao docs/openapi.yaml', () => {
   });
   afterEach(() => app.close());
 
-  it('o contrato tem as 17 operações da API', () => {
+  it('o contrato tem as 18 operações da API', () => {
     // Sem isto, um contrato vazio faria os testes abaixo passarem sem conferir nada.
-    expect(operacoes).toHaveLength(17);
+    expect(operacoes).toHaveLength(18);
   });
 
   it('toda operação documentada existe como rota da aplicação', async () => {
@@ -242,6 +242,8 @@ describe('aderência da API ao docs/openapi.yaml', () => {
     const semSaldo = await reservar(H11);
     const agenda = await chamar('/agenda', 'GET', '/agenda?data=2026-11-20', { headers: instrutor });
     const { aula } = reserva.resposta.json<{ aula: { id: string } }>();
+    const retirar = (headers: { authorization: string }, payload: object) =>
+      chamar('/disponibilidades/retirar', 'POST', '/disponibilidades/retirar', { headers, payload });
     const cancelar = () =>
       chamar('/aulas/{id}/cancelar', 'POST', `/aulas/${aula.id}/cancelar`, { headers: aluno });
 
@@ -262,8 +264,14 @@ describe('aderência da API ao docs/openapi.yaml', () => {
       ocupado,
       semSaldo,
       agenda,
+      await retirar(instrutor, { inicio: H11 }),
+      await retirar(instrutor, { inicio: H10 }),
+      await retirar(aluno, { inicio: H10 }),
+      await retirar(instrutor, { inicio: '2026-11-20T15:00:00.000Z' }),
       await cancelar(),
       await cancelar(),
+      await reservar(H10),
+      await retirar(instrutor, { inicio: H10, cancelarAula: true }),
       await chamar('/aulas/{id}/cancelar', 'POST', '/aulas/fantasma/cancelar', { headers: aluno }),
       await chamar('/alunos/{id}/pacote', 'POST', '/alunos/fantasma/pacote', {
         headers: instrutor,
@@ -316,7 +324,8 @@ describe('aderência da API ao docs/openapi.yaml', () => {
 
     // Sem isto o teste passaria mesmo que o fluxo falhasse: confirma cada caminho exercitado.
     expect(observadas.map((o) => o.resposta.statusCode)).toEqual([
-      201, 409, 201, 401, 201, 409, 403, 429, 200, 200, 204, 200, 201, 409, 422, 200, 200, 409, 404, 404, 400, 403,
+      201, 409, 201, 401, 201, 409, 403, 429, 200, 200, 204, 200, 201, 409, 422, 200, 200, 409, 403,
+      422, 200, 409, 201, 200, 404, 404, 400, 403,
       401, 400, 200, 403, 200, 401, 403, 404, 400, 201, 204, 204, 403, 204, 204,
     ]);
 

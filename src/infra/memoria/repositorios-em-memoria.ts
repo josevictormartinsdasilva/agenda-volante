@@ -180,17 +180,26 @@ class PacoteEmMemoria implements PacoteRepository {
 }
 
 class DisponibilidadeEmMemoria implements DisponibilidadeRepository {
-  /** Instantes em ms: o Set descarta duplicados. */
-  private readonly inicios = new Set<number>();
+  /** Chave: o instante em ms (o Map descarta duplicados). */
+  readonly tabela = new Tabela<Date>();
 
   async publicar(inicios: readonly Date[]): Promise<void> {
-    for (const inicio of inicios) this.inicios.add(inicio.getTime());
+    for (const inicio of inicios) this.tabela.linhas.set(String(inicio.getTime()), inicio);
   }
 
   async listarEntre(de: Date, ate: Date): Promise<Date[]> {
-    return [...this.inicios]
-      .filter((ms) => ms >= de.getTime() && ms < ate.getTime())
-      .map((ms) => new Date(ms));
+    return [...this.tabela.linhas.values()]
+      .filter((d) => d.getTime() >= de.getTime() && d.getTime() < ate.getTime())
+      .sort((a, b) => a.getTime() - b.getTime());
+  }
+
+  async retirar(inicio: Date): Promise<boolean> {
+    return this.tabela.linhas.delete(String(inicio.getTime()));
+  }
+
+  async travar(inicio: Date): Promise<boolean> {
+    // Não há o que travar: as transações em memória já rodam uma por vez.
+    return this.tabela.linhas.has(String(inicio.getTime()));
   }
 }
 
@@ -240,6 +249,7 @@ export function criarRepositoriosEmMemoria(): Armazenamento {
   const sessoes = new SessaoEmMemoria();
   const codigos = new CodigoEmMemoria();
   const pacotes = new PacoteEmMemoria();
+  const disponibilidade = new DisponibilidadeEmMemoria();
   const aulas = new AulaEmMemoria();
   const repos: Repositorios = {
     alunos,
@@ -247,12 +257,13 @@ export function criarRepositoriosEmMemoria(): Armazenamento {
     sessoes,
     codigos,
     pacotes,
-    disponibilidade: new DisponibilidadeEmMemoria(),
+    disponibilidade,
     aulas,
   };
-  // O que uma transação que falha desfaz. A disponibilidade fica de fora: nenhuma
-  // transação a grava hoje.
-  const tabelas = [alunos, usuarios, sessoes, codigos, pacotes, aulas].map((r) => r.tabela);
+  // O que uma transação que falha desfaz.
+  const tabelas = [alunos, usuarios, sessoes, codigos, pacotes, disponibilidade, aulas].map(
+    (r) => r.tabela,
+  );
 
   // Uma transação por vez: cada uma espera a anterior terminar. Assim o retrato tirado no
   // início não apaga, ao ser restaurado, o que outra transação gravou no meio.

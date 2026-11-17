@@ -3,8 +3,11 @@ import {
   AlunoNaoEncontrado,
   AulaJaCancelada,
   AulaNaoEncontrada,
+  HorarioComAulaReservada,
   HorarioForaDaGrade,
+  HorarioIndisponivel,
   HorarioOcupado,
+  RetiradaNoPassado,
   SaldoInsuficiente,
 } from '../../src/domain/erros.js';
 import { criarAluno, criarAmbiente } from '../helpers.js';
@@ -258,5 +261,102 @@ describe('consultarAgenda', () => {
     const agenda = await ambiente.casos.consultarAgenda('2026-11-20');
 
     expect(agenda.map((a) => a.id)).toEqual([primeira.aula.id]);
+  });
+});
+
+describe('retirarDisponibilidade', () => {
+  it('retira o horário livre: ele some dos horários livres e não aceita mais reserva (R4)', async () => {
+    const ambiente = criarAmbiente();
+    const aluno = await alunoComPacote(ambiente, 1);
+    await ambiente.casos.publicarDisponibilidade([H10, H11]);
+
+    const resultado = await ambiente.casos.retirarDisponibilidade(H10);
+
+    expect(resultado).toEqual({ aulaCancelada: null });
+    expect(await ambiente.casos.consultarHorariosLivres('2026-11-20')).toEqual([H11]);
+    await expect(ambiente.casos.reservarAula(aluno.id, H10)).rejects.toBeInstanceOf(
+      HorarioIndisponivel,
+    );
+  });
+
+  it('recusa horário que não está publicado', async () => {
+    const { casos } = criarAmbiente();
+
+    await expect(casos.retirarDisponibilidade(H10)).rejects.toBeInstanceOf(HorarioIndisponivel);
+  });
+
+  it('recusa horário que já começou ou já passou, e ele continua publicado', async () => {
+    const ambiente = criarAmbiente();
+    await ambiente.casos.publicarDisponibilidade([H10]);
+    ambiente.relogio.agora = H10;
+
+    await expect(ambiente.casos.retirarDisponibilidade(H10)).rejects.toBeInstanceOf(
+      RetiradaNoPassado,
+    );
+    expect(await ambiente.repositorios.disponibilidade.listarEntre(H10, H11)).toEqual([H10]);
+  });
+
+  it('com aula reservada e sem confirmação, recusa e não muda nada', async () => {
+    const ambiente = criarAmbiente();
+    const aluno = await alunoComPacote(ambiente, 1);
+    await ambiente.casos.publicarDisponibilidade([H10]);
+    const { aula } = await ambiente.casos.reservarAula(aluno.id, H10);
+
+    await expect(ambiente.casos.retirarDisponibilidade(H10)).rejects.toBeInstanceOf(
+      HorarioComAulaReservada,
+    );
+    expect(await ambiente.repositorios.disponibilidade.listarEntre(H10, H11)).toEqual([H10]);
+    expect((await ambiente.repositorios.aulas.buscarPorId(aula.id))?.status).toBe('reservada');
+    expect((await ambiente.repositorios.pacotes.buscarPorAluno(aluno.id))?.saldo).toBe(0);
+  });
+
+  it('com confirmação, cancela a aula e devolve o crédito mesmo a menos de 48 h (sem R6)', async () => {
+    const ambiente = criarAmbiente();
+    const aluno = await alunoComPacote(ambiente, 1);
+    await ambiente.casos.publicarDisponibilidade([AMANHA_10H]);
+    const { aula } = await ambiente.casos.reservarAula(aluno.id, AMANHA_10H);
+
+    const resultado = await ambiente.casos.retirarDisponibilidade(AMANHA_10H, {
+      cancelarAula: true,
+    });
+
+    expect(resultado.aulaCancelada).toEqual({ ...aula, status: 'cancelada' });
+    expect((await ambiente.repositorios.aulas.buscarPorId(aula.id))?.status).toBe('cancelada');
+    expect((await ambiente.repositorios.pacotes.buscarPorAluno(aluno.id))?.saldo).toBe(1);
+    expect(await ambiente.casos.consultarHorariosLivres('2026-11-11')).toEqual([]);
+  });
+
+  it('aula já cancelada no horário não impede a retirada nem devolve crédito', async () => {
+    const ambiente = criarAmbiente();
+    const aluno = await alunoComPacote(ambiente, 1);
+    await ambiente.casos.publicarDisponibilidade([AMANHA_10H]);
+    const { aula } = await ambiente.casos.reservarAula(aluno.id, AMANHA_10H);
+    await ambiente.casos.cancelarAula(aula.id); // a menos de 48 h: crédito consumido
+
+    expect(await ambiente.casos.retirarDisponibilidade(AMANHA_10H)).toEqual({
+      aulaCancelada: null,
+    });
+    expect((await ambiente.repositorios.pacotes.buscarPorAluno(aluno.id))?.saldo).toBe(0);
+  });
+
+  it('reserva e retirada simultâneas: a aula nunca fica num horário retirado (R4)', async () => {
+    const ambiente = criarAmbiente();
+    const aluno = await alunoComPacote(ambiente, 1);
+    await ambiente.casos.publicarDisponibilidade([H10]);
+
+    const [reserva, retirada] = await Promise.allSettled([
+      ambiente.casos.reservarAula(aluno.id, H10),
+      ambiente.casos.retirarDisponibilidade(H10),
+    ]);
+
+    // Exatamente uma das duas passa; a outra é recusada pela regra certa.
+    expect([reserva.status, retirada.status].sort()).toEqual(['fulfilled', 'rejected']);
+    if (reserva.status === 'rejected') {
+      expect(reserva.reason).toBeInstanceOf(HorarioIndisponivel);
+      expect((await ambiente.repositorios.pacotes.buscarPorAluno(aluno.id))?.saldo).toBe(1);
+    } else if (retirada.status === 'rejected') {
+      expect(retirada.reason).toBeInstanceOf(HorarioComAulaReservada);
+      expect(await ambiente.repositorios.disponibilidade.listarEntre(H10, H11)).toEqual([H10]);
+    }
   });
 });

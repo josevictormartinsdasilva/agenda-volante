@@ -204,6 +204,24 @@ class DisponibilidadePrisma implements DisponibilidadeRepository {
     });
     return linhas.map((linha) => linha.inicio);
   }
+
+  async retirar(inicio: Date): Promise<boolean> {
+    // O DELETE trava a linha: se uma reserva a travou antes (`travar`), ele espera ela
+    // terminar; e quem travar depois espera ele (ADR 0007).
+    const { count } = await this.db.disponibilidade.deleteMany({ where: { inicio } });
+    return count === 1;
+  }
+
+  async travar(inicio: Date): Promise<boolean> {
+    // O Prisma não expressa `FOR SHARE`. Várias reservas podem travar o mesmo horário ao
+    // mesmo tempo (o índice único de R3 decide entre elas); só o DELETE fica esperando.
+    // Se a linha foi apagada enquanto esperava, o Postgres não a devolve.
+    const linhas = await this.db.$queryRaw<unknown[]>`
+      SELECT 1 FROM "Disponibilidade"
+      WHERE "inicio" = ${inicio.toISOString()}::timestamptz
+      FOR SHARE`;
+    return linhas.length === 1;
+  }
 }
 
 class AulaPrisma implements AulaRepository {

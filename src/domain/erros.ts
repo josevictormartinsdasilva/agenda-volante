@@ -51,6 +51,22 @@ export class SaldoInsuficiente extends ErroDeDominio {
   }
 }
 
+/** O instrutor tentou retirar um horário que já começou ou já passou: ele é histórico. */
+export class RetiradaNoPassado extends ErroDeDominio {
+  constructor() {
+    super('Não é possível retirar um horário que já começou ou já passou');
+  }
+}
+
+/** Retirar o horário cancelaria a aula reservada nele, e o instrutor não confirmou. */
+export class HorarioComAulaReservada extends ErroDeDominio {
+  constructor() {
+    super(
+      'Há uma aula reservada nesse horário. Confirme para cancelá-la e devolver o crédito ao aluno',
+    );
+  }
+}
+
 export class AulaJaCancelada extends ErroDeDominio {
   constructor() {
     super('Essa aula já foi cancelada');
