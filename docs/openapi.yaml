@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Agenda Volante
-  version: 0.6.0
+  version: 0.7.0
   description: |
     API de agendamento de aulas de um instrutor de trânsito autônomo. O aluno consulta
     os horários livres e reserva sem interromper o instrutor.
@@ -326,7 +326,7 @@ paths:
       tags: [Alunos]
       operationId: listarAlunos
       summary: Lista os alunos (instrutor)
-      description: Alunos em ordem de nome, com o e-mail da conta. Serve para o instrutor achar o aluno ao registrar um pacote.
+      description: Alunos em ordem de nome, com o e-mail da conta e o saldo do pacote. Serve para o instrutor achar o aluno ao registrar um pacote.
       security:
         - tokenDeSessao: []
         - cookieDeSessao: []
@@ -342,6 +342,7 @@ paths:
                   - id: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
                     nome: Ana
                     email: ana@exemplo.com
+                    saldo: 9
         '401':
           $ref: '#/components/responses/NaoAutenticado'
         '403':
@@ -630,6 +631,26 @@ paths:
           $ref: '#/components/responses/MuitasTentativas'
 
   /sessoes/atual:
+    get:
+      tags: [Sessões]
+      operationId: sessaoAtual
+      summary: Quem está logado
+      description: Papel e aluno da sessão atual. A interface web usa para escolher as telas.
+      security:
+        - tokenDeSessao: []
+        - cookieDeSessao: []
+      responses:
+        '200':
+          description: Sessão válida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessaoAtual'
+              example:
+                papel: aluno
+                alunoId: 7c1f0d2e-3b44-4a8e-9a55-1f2c6d9b0a11
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
     delete:
       tags: [Sessões]
       operationId: sair
@@ -808,6 +829,16 @@ components:
             - string
             - 'null'
           description: Nulo se o aluno foi cadastrado antes de existir conta de acesso
+    AlunoDaLista:
+      allOf:
+        - $ref: '#/components/schemas/AlunoComConta'
+        - type: object
+          required: [saldo]
+          properties:
+            saldo:
+              type: integer
+              minimum: 0
+              description: Saldo do pacote; zero se o aluno nunca recebeu crédito
     AlunosResposta:
       type: object
       required: [alunos]
@@ -815,7 +846,19 @@ components:
         alunos:
           type: array
           items:
-            $ref: '#/components/schemas/AlunoComConta'
+            $ref: '#/components/schemas/AlunoDaLista'
+    SessaoAtual:
+      type: object
+      required: [papel, alunoId]
+      properties:
+        papel:
+          type: string
+          enum: [admin, instrutor, aluno]
+        alunoId:
+          type:
+            - string
+            - 'null'
+          description: Nulo para o administrador e o instrutor
     InstrutorPedido:
       type: object
       required: [email, senha]

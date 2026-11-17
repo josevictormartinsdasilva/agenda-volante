@@ -18,7 +18,7 @@ function criarDbFalso() {
     usuario: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), delete: vi.fn() },
     sessao: { create: vi.fn(), findUnique: vi.fn(), deleteMany: vi.fn() },
     codigoDeRedefinicao: { upsert: vi.fn(), deleteMany: vi.fn() },
-    pacote: { upsert: vi.fn(), updateManyAndReturn: vi.fn(), findUnique: vi.fn() },
+    pacote: { upsert: vi.fn(), updateManyAndReturn: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
     disponibilidade: { createMany: vi.fn(), findMany: vi.fn() },
     aula: { upsert: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
     // Como o Prisma: chama o trabalho com o client da transação e repassa o resultado.
@@ -145,6 +145,14 @@ describe('adaptador Prisma', () => {
 
     expect(await repos.aulas.listarDoAluno('ana')).toEqual([AULA]);
     expect(db.aula.findMany).toHaveBeenCalledWith({ where: { alunoId: 'ana' }, orderBy: { inicio: 'asc' } });
+  });
+
+  it('pacotes: lista todos', async () => {
+    const { db, repos } = criarDbFalso();
+    db.pacote.findMany.mockResolvedValue([{ alunoId: 'ana', saldo: 2 }]);
+
+    expect(await repos.pacotes.listar()).toEqual([{ alunoId: 'ana', saldo: 2 }]);
+    expect(db.pacote.findMany).toHaveBeenCalledWith();
   });
 
   it('repassa qualquer outro erro sem disfarçá-lo de horário ocupado', async () => {

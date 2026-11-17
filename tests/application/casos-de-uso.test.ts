@@ -20,7 +20,7 @@ async function alunoComPacote(ambiente: ReturnType<typeof criarAmbiente>, saldo:
 }
 
 describe('listarAlunos e registrarPacote', () => {
-  it('lista os alunos em ordem de nome, com o e-mail de quem tem conta', async () => {
+  it('lista os alunos em ordem de nome, com o e-mail de quem tem conta e o saldo', async () => {
     const ambiente = criarAmbiente();
     const semConta = await criarAluno(ambiente, 'Bia');
     const comConta = await ambiente.autenticacao.cadastrarAluno({
@@ -29,9 +29,11 @@ describe('listarAlunos e registrarPacote', () => {
       senha: 'senha-da-ana',
     });
 
+    await ambiente.casos.registrarPacote(comConta.id, 4);
+
     expect(await ambiente.casos.listarAlunos()).toEqual([
-      { id: comConta.id, nome: 'Ana', email: 'ana@exemplo.com' },
-      { id: semConta.id, nome: 'Bia', email: null },
+      { id: comConta.id, nome: 'Ana', email: 'ana@exemplo.com', saldo: 4 },
+      { id: semConta.id, nome: 'Bia', email: null, saldo: 0 },
     ]);
   });
 
