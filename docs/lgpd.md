@@ -13,6 +13,10 @@ contas de acesso (etapa 4 da fase 2).
 - **Operador:** quem hospeda e mantém o sistema para ele (hoje, eu).
 - **Titulares:** os alunos, o instrutor e quem tem conta de administrador.
 
+**Onde ficam os dados:** numa VPS contratada pelo operador
+([`deploy.md`](deploy.md)). A orientação é escolher datacenter no Brasil; um provedor fora
+do país seria transferência internacional (art. 33) e precisaria de base própria.
+
 ## O que é guardado
 
 | Dado | Onde | Para quê |
@@ -68,12 +72,14 @@ direto no banco. Isso serve para um piloto pequeno, não para vender o sistema.
 - Cada aluno só reserva e cancela as próprias aulas; só o instrutor lista alunos.
 - Limite de tentativas de login: 5 por e-mail e 20 por IP a cada 15 minutos (ADR 0004).
 - `/metrics` fora da porta pública: só a rede interna alcança.
-- **Falta:** HTTPS (depende do deploy), troca e recuperação de senha, e um plano de
-  resposta a incidente.
+- Em produção, só HTTPS (Caddy, com HSTS); banco e métricas não são alcançáveis de fora da
+  VPS (ADR 0008).
+- **Falta:** backup do banco (etapa 6b) e um plano de resposta a incidente.
 
 ## Antes de usar com alunos reais
 
 1. Validar a base legal e este documento.
 2. Escrever o aviso de privacidade que o aluno lê ao criar a conta.
-4. Servir só por HTTPS (e, atrás de proxy, `TRUST_PROXY=true`).
-5. Definir com o instrutor o prazo de guarda do histórico de aulas.
+3. Subir com o `docker-compose.prod.yml` (HTTPS e `TRUST_PROXY=true` já vêm nele) e ter
+   o backup do banco funcionando (etapa 6b).
+4. Definir com o instrutor o prazo de guarda do histórico de aulas.

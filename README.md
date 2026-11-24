@@ -47,6 +47,14 @@ Para parar e apagar os contêineres e os dados do banco:
 docker compose down -v
 ```
 
+### Em produção
+
+Numa VPS, com HTTPS automático pelo Caddy, o arquivo é outro:
+`docker compose -f docker-compose.prod.yml up -d --build`. Ele só publica as portas 80 e
+443, liga o cookie seguro e recusa subir sem `DOMINIO` e `POSTGRES_PASSWORD` no `.env`.
+Roteiro completo (VPS, firewall, DNS, primeira conta, atualização) em
+[`docs/deploy.md`](docs/deploy.md). O backup automático ainda não existe (etapa 6b).
+
 ### Experimente o fluxo principal
 
 Com a API no ar, o fluxo de ponta a ponta com `curl` (Git Bash, macOS ou Linux). Use uma
@@ -246,15 +254,20 @@ Fluxo principal (contrato completo em [`docs/openapi.yaml`](docs/openapi.yaml)):
   mesma linha de `Disponibilidade` (`FOR SHARE` contra `DELETE`): ADR em
   [`docs/adr/0007-retirada-de-horario-com-confirmacao.md`](docs/adr/0007-retirada-de-horario-com-confirmacao.md).
 
+- **Deploy:** VPS com o `docker-compose.prod.yml` e o Caddy na frente (HTTPS automático,
+  HSTS); só o proxy publica portas, e a CI sobe essa stack para conferir. ADR em
+  [`docs/adr/0008-deploy-em-vps-com-compose-e-caddy.md`](docs/adr/0008-deploy-em-vps-com-compose-e-caddy.md).
+
 ## Estrutura
 
 ```
 src/          código da aplicação
+deploy/       configuração do proxy de produção (Caddyfile)
 web/          interface do aluno e do instrutor (HTML, CSS e JS sem build)
 tests/        testes automatizados
 k6/           smoke test de desempenho
 prisma/       schema e migrations
-docs/         regras de negócio, ADR, OpenAPI, SLO, desempenho, LGPD, uso de IA
+docs/         regras de negócio, ADR, OpenAPI, SLO, desempenho, LGPD, deploy, uso de IA
 .github/      pipeline de CI
 ```
 
