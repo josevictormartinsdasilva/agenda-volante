@@ -1,0 +1,89 @@
+# Produção numa VPS, atrás do Caddy com HTTPS automático. Roteiro: docs/deploy.md.
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Arquivo completo, e não um "override" do docker-compose.yml: num override as listas de
+# "ports" se somam, e a porta 3000 da API continuaria publicada. Ver ADR 0008.
+#
+# Diferente do desenvolvimento, não há padrão para segredo nem domínio: sem DOMINIO e
+# POSTGRES_PASSWORD no .env, o Compose recusa subir em vez de usar um valor conhecido.
+
+# Logs do Docker crescem sem limite por padrão e enchem o disco da VPS.
+x-log: &log
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
+services:
+  proxy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    # As únicas portas abertas para fora. A 80 só serve para o Let's Encrypt validar o
+    # domínio e para redirecionar ao HTTPS.
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Aspas: sem elas, o ": " da mensagem quebraria o YAML.
+      DOMINIO: "${DOMINIO:?defina DOMINIO no .env, ex.: agenda.exemplo.com.br}"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificados emitidos. Sem este volume, cada recriação pediria certificado novo e
+      # esbarraria no limite de emissões do Let's Encrypt.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *log
+
+  api:
+    build: .
+    restart: unless-stopped
+    # Sem "ports": a API só é alcançada pelo proxy, na rede interna do Compose.
+    environment:
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-agenda}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@db:5432/${POSTGRES_DB:-agenda}"
+      CANCELAMENTO_ANTECEDENCIA_HORAS: ${CANCELAMENTO_ANTECEDENCIA_HORAS:-48}
+      DURACAO_AULA_MINUTOS: ${DURACAO_AULA_MINUTOS:-50}
+      SESSAO_DURACAO_HORAS: ${SESSAO_DURACAO_HORAS:-168}
+      METRICS_PORT: 9100
+      # O navegador só fala com o Caddy por HTTPS: o cookie da sessão pode ser "Secure".
+      COOKIE_SEGURO: "true"
+      # Só o Caddy alcança a API, e ele reescreve o X-Forwarded-For com o IP real do
+      # cliente. Sem isso, todos dividiriam o limite de login por IP (ADR 0004).
+      TRUST_PROXY: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    logging: *log
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    # Sem "ports": o banco não é alcançável de fora da VPS.
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agenda}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}"
+      POSTGRES_DB: ${POSTGRES_DB:-agenda}
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agenda} -d ${POSTGRES_DB:-agenda}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *log
+
+volumes:
+  dbdata:
+  caddy_data:
+  caddy_config:

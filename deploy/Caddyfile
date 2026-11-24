@@ -1,0 +1,24 @@
+# Proxy de produção: HTTPS automático (Let's Encrypt) na frente da API. Ver ADR 0008.
+# O domínio vem da variável DOMINIO do .env, repassada pelo docker-compose.prod.yml.
+
+{
+	# Só HTTP/1.1 e HTTP/2. O HTTP/3 usaria a porta 443/udp, que o Compose não publica.
+	servers {
+		protocols h1 h2
+	}
+}
+
+{$DOMINIO} {
+	encode zstd gzip
+
+	header {
+		# Depois da primeira visita, o navegador recusa voltar ao http por um ano.
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# O Caddy descarta o X-Forwarded-For que vem do cliente e escreve o IP real dele;
+	# por isso a API pode ligar TRUST_PROXY. O /metrics fica na porta 9100, que não passa
+	# por aqui.
+	reverse_proxy api:3000
+}

@@ -70,3 +70,60 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Sobe o docker-compose.prod.yml de verdade. Com DOMINIO=localhost o Caddy usa um
+  # certificado da própria autoridade interna (não fala com o Let's Encrypt), então o
+  # HTTPS funciona aqui do mesmo jeito que na VPS, só que com `curl -k`. Valores fictícios.
+  producao:
+    runs-on: ubuntu-latest
+    env:
+      DOMINIO: localhost
+      POSTGRES_PASSWORD: senha_ficticia_ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compose recusa subir sem senha do banco
+        run: |
+          if POSTGRES_PASSWORD= docker compose -f docker-compose.prod.yml config --quiet 2>/dev/null; then
+            echo "o Compose de produção aceitou subir sem POSTGRES_PASSWORD"; exit 1
+          fi
+
+      - name: Caddyfile válido
+        run: >-
+          docker run --rm -e DOMINIO -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro"
+          caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+      - name: Subir a produção (espera a API ficar healthy)
+        run: docker compose -f docker-compose.prod.yml up -d --build --wait
+
+      - name: HTTPS responde, com HSTS, e o http redireciona
+        run: |
+          curl -fsk --retry 10 --retry-all-errors --retry-delay 2 https://localhost/ready
+          curl -fsk -D - -o /dev/null https://localhost/ | grep -i '^strict-transport-security: max-age='
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost/)" = 308
+
+      - name: Nada além de 80 e 443 aberto (API, banco e métricas só na rede interna)
+        run: |
+          # Conexão TCP crua: o Postgres não fala HTTP, então curl não serviria para o 5432.
+          for porta in 3000 5432 9100; do
+            if timeout 3 bash -c "</dev/tcp/127.0.0.1/$porta" 2>/dev/null; then
+              echo "porta $porta respondeu de fora do Compose"; exit 1
+            fi
+          done
+          test "$(curl -sk -o /dev/null -w '%{http_code}' https://localhost/metrics)" = 404
+
+      - name: docker stop encerra a API sem precisar de SIGKILL
+        run: |
+          docker compose -f docker-compose.prod.yml stop -t 10 api
+          codigo=$(docker inspect --format '{{.State.ExitCode}}' "$(docker compose -f docker-compose.prod.yml ps -aq api)")
+          echo "código de saída da API: $codigo"
+          test "$codigo" != 137
+          docker compose -f docker-compose.prod.yml logs api | grep 'encerrando a aplicação'
+
+      - name: Logs em caso de falha
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml logs
+
+      - name: Derrubar
+        if: always()
+        run: docker compose -f docker-compose.prod.yml down -v
